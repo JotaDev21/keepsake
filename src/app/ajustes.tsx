@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BackButton, Card, Icon, Text } from '@/components';
@@ -10,6 +11,7 @@ import { prefs } from '@/lib/prefs';
 
 export default function Ajustes() {
   const theme = useTheme();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const [appLock, setAppLock] = useState(prefs.isAppLockEnabled());
 
@@ -43,6 +45,26 @@ export default function Ajustes() {
         <Text variant="title1" color="text" style={{ marginBottom: 24 }}>
           Ajustes
         </Text>
+
+        <Text variant="overline" color="textMuted" style={{ marginBottom: 12 }}>
+          Vínculo
+        </Text>
+        <Card onPress={() => router.push('/conexao')} accessibilityLabel="Conexão" style={{ marginBottom: 24 }}>
+          <View style={styles.row}>
+            <View style={[styles.glyph, { backgroundColor: theme.colors.accentSoft }]}>
+              <Icon name="heart" size={18} color="accent" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text variant="callout" color="text">
+                Conexão
+              </Text>
+              <Text variant="subhead" color="textMuted" style={{ marginTop: 2 }}>
+                Parear os dois apps e ver o humor um do outro.
+              </Text>
+            </View>
+            <Icon name="chevron-right" size={20} color="textMuted" />
+          </View>
+        </Card>
 
         <Text variant="overline" color="textMuted" style={{ marginBottom: 12 }}>
           Privacidade

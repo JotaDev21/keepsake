@@ -4,6 +4,8 @@ import { moodRepo } from '@/db/repositories';
 import { startOfDay } from '@/lib/mood';
 import type { MoodEntry, MoodEntryDraft } from '@/types/models';
 
+import { useSyncStore } from './useSyncStore';
+
 const DAY = 86400000;
 const HISTORY_DAYS = 42;
 
@@ -38,5 +40,7 @@ export const useMoodStore = create<MoodState>((set) => ({
   save: async (personId, draft) => {
     await moodRepo.upsert(personId, draft);
     set(await refresh(personId));
+    // Mirror to the partner's app (no-op if not paired / offline).
+    useSyncStore.getState().pushMood(draft).catch(() => {});
   },
 }));

@@ -10,10 +10,13 @@ import { countdownLabel, daysUntil } from '@/lib/dates';
 import { formatLongDate, greetingForHour } from '@/lib/format';
 import { mediaUri } from '@/lib/media';
 import { memoryOfDay } from '@/lib/memory';
-import { moodScale, startOfDay } from '@/lib/mood';
+import { moodColor, moodScale, startOfDay } from '@/lib/mood';
 import { usePersonStore } from '@/stores/usePersonStore';
 import { useMediaStore } from '@/stores/useMediaStore';
 import { useMoodStore } from '@/stores/useMoodStore';
+import { useSyncStore } from '@/stores/useSyncStore';
+
+const moodLabel = (key: string) => moodScale.find((m) => m.key === key)?.label ?? key;
 
 /** Hoje — the daily hub. The one screen that gives a reason to open the app. */
 export default function HojeScreen() {
@@ -28,6 +31,9 @@ export default function HojeScreen() {
   const moodToday = useMoodStore((s) => s.today);
   const loadMood = useMoodStore((s) => s.load);
   const saveMood = useMoodStore((s) => s.save);
+  const syncStatus = useSyncStore((s) => s.status);
+  const paired = useSyncStore((s) => s.paired);
+  const partnerMood = useSyncStore((s) => s.partnerMood);
 
   useEffect(() => {
     if (person) {
@@ -110,6 +116,41 @@ export default function HojeScreen() {
         <MoodSelector options={moodScale} value={moodIndex} onChange={pickMood} />
       </Animated.View>
 
+      {syncStatus === 'ready' && paired && partnerMood ? (
+        <Animated.View entering={enterRise(3)} style={styles.section}>
+          <Card onPress={() => router.push('/conexao')}>
+            <Text variant="overline" color="accent" style={{ marginBottom: 10 }}>
+              Hoje, {person?.nome ?? 'ela'}
+            </Text>
+            <View style={styles.partnerRow}>
+              <View style={[styles.partnerDot, { backgroundColor: moodColor(partnerMood.humor) }]} />
+              <Text variant="title2" color="text">
+                {moodLabel(partnerMood.humor)}
+              </Text>
+            </View>
+          </Card>
+        </Animated.View>
+      ) : syncStatus === 'ready' && !paired ? (
+        <Animated.View entering={enterRise(3)} style={styles.section}>
+          <Card onPress={() => router.push('/conexao')}>
+            <View style={styles.partnerRow}>
+              <View style={[styles.partnerGlyph, { backgroundColor: theme.colors.accentSoft }]}>
+                <Icon name="heart" size={18} color="accent" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text variant="callout" color="text">
+                  Conecte-se com {person?.nome ?? 'ela'}
+                </Text>
+                <Text variant="subhead" color="textMuted" style={{ marginTop: 2 }}>
+                  Pra ver o humor dela aqui.
+                </Text>
+              </View>
+              <Icon name="chevron-right" size={20} color="textMuted" />
+            </View>
+          </Card>
+        </Animated.View>
+      ) : null}
+
       {upcoming.length > 0 ? (
         <Animated.View entering={enterRise(3)} style={styles.section}>
           <Text variant="heading" color="text" style={{ marginBottom: 12 }}>
@@ -170,5 +211,8 @@ const styles = StyleSheet.create({
   emptyMemory: { alignItems: 'center', paddingVertical: 32 },
   dateRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 14 },
   dateIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  partnerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  partnerDot: { width: 18, height: 18, borderRadius: 9 },
+  partnerGlyph: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
 });
