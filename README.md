@@ -1,56 +1,65 @@
-# Welcome to your Expo app 👋
+# ev
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Um lugar dedicado a uma pessoa — para guardar quem ela é, registrar o que se
+sente, e revisitar isso no dia a dia. Local-first, privado, sem telemetria.
+Premium = contenção + movimento.
 
-## Get started
+> Não é um app de fotos. Cada decisão técnica é uma decisão sobre como se
+> lembra de alguém.
 
-1. Install dependencies
+## Stack
 
-   ```bash
-   npm install
-   ```
+- **Expo SDK 56** + **React Native 0.85** + **TypeScript estrito**
+- **Expo Router** (navegação file-based, typed routes)
+- **Reanimated 4** + **Gesture Handler** — animações na UI thread (60/120fps)
+- **expo-image**, **expo-blur**, **expo-haptics**, **expo-linear-gradient**
+- **Newsreader** (serif, títulos emocionais) + **Inter** (sans, UI)
+- **Zustand** para estado (a usar a partir da Fase 1)
 
-2. Start the app
+## Rodar (dev build via USB)
 
-   ```bash
-   npx expo start
-   ```
+Pré-requisito: toolchain Android instalado — veja
+[docs/SETUP-ANDROID.md](docs/SETUP-ANDROID.md).
 
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```powershell
+npm run android   # primeira vez: compila e instala o dev build no celular
+npm start         # depois: só o servidor Metro (Fast Refresh)
+npm run typecheck # tsc --noEmit (estrito)
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Estrutura
 
-### Other setup steps
+```
+src/
+  app/                      # rotas (Expo Router)
+    _layout.tsx             # providers (gesture, safe-area, tema, lightbox) + Stack
+    (tabs)/                 # navegação principal
+      _layout.tsx           # tab bar de vidro custom
+      index.tsx             # Hoje (hub diário)
+      cofre.tsx             # Cofre de mídia (galeria)
+      linha-do-tempo.tsx    # Linha do tempo
+      humor.tsx             # Humor / diário emocional
+      perfil.tsx            # Perfil da pessoa (capa com parallax)
+    memoria/[id].tsx        # Detalhe de memória
+    carta/[id].tsx          # Carta / cápsula (abertura ritual)
+  design/                   # tokens: cores, tipografia, espaçamento, motion, tema
+  components/               # UI kit (Text, Button, Card, GlassSurface, TabBar, Lightbox…)
+  animations/               # hooks e presets (springs, press-scale, stagger)
+  lib/                      # helpers (háptica, datas, dados de exemplo)
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+## Princípios
 
-## Learn more
+1. **Local-first e privado** — nada sai do aparelho por padrão.
+2. **Premium = contenção + movimento** — pouca coisa na tela, física de mola
+   (nunca easing linear).
+3. **Uso diário com propósito** — a tela Hoje dá motivo pra voltar.
 
-To learn more about developing your project with Expo, look at the following resources:
+Quando uma decisão de design for ambígua, escolha a versão mais silenciosa,
+mais lenta e mais cuidadosa.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Status
 
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+**Fase 0 (Fundação)** concluída: design system, navegação e provas de animação.
+Dados ainda são de exemplo (`src/lib/sampleData.ts`); persistência local entra
+na Fase 1. Roteiro completo no documento de planejamento do projeto.
