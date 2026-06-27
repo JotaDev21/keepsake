@@ -24,8 +24,8 @@ export const fonts = {
  * sans for everything functional. Line-heights are generous on purpose.
  */
 export const typography = {
-  hero: { fontFamily: fonts.serif, fontSize: 56, lineHeight: 60, letterSpacing: -0.8 },
-  display: { fontFamily: fonts.serif, fontSize: 48, lineHeight: 54, letterSpacing: -0.6 },
+  hero: { fontFamily: fonts.serif, fontSize: 60, lineHeight: 62, letterSpacing: -1 },
+  display: { fontFamily: fonts.serif, fontSize: 46, lineHeight: 50, letterSpacing: -0.6 },
   title1: { fontFamily: fonts.serifMedium, fontSize: 34, lineHeight: 40, letterSpacing: -0.4 },
   title2: { fontFamily: fonts.serifMedium, fontSize: 24, lineHeight: 30, letterSpacing: -0.2 },
   serif: { fontFamily: fonts.serif, fontSize: 19, lineHeight: 29, letterSpacing: 0 },
@@ -39,7 +39,7 @@ export const typography = {
     fontFamily: fonts.sansSemibold,
     fontSize: 11,
     lineHeight: 14,
-    letterSpacing: 1.4,
+    letterSpacing: 2.4,
     textTransform: 'uppercase',
   },
 } satisfies Record<string, TextStyle>;

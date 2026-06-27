@@ -19,19 +19,19 @@ export function withAlpha(hex: string, alpha: number): string {
 }
 
 export const palette = {
-  // Warm near-black ramp (background → elevated surfaces).
-  ink900: '#0A0807', // deepest — behind everything, vignette
-  ink800: '#110E0C', // base background
-  ink700: '#18130F', // resting surface (cards)
-  ink600: '#211B16', // elevated surface
-  ink500: '#2B241E', // strong hairline
+  // Editorial near-pure-black ramp — neutral, high contrast, dramatic.
+  ink900: '#000000', // true black — behind everything
+  ink800: '#080808', // base background
+  ink700: '#131313', // resting surface (cards)
+  ink600: '#1C1C1C', // elevated surface
+  ink500: '#2A2A2A', // strong hairline
 
-  // Warm neutrals for text.
-  bone: '#F5EFE8', // primary text — warm off-white, never pure white
-  boneDim: '#E6DDD2', // primary text on busy/photo backgrounds
-  stone400: '#B3A89C', // secondary text
-  stone500: '#8C8074', // muted text
-  stone600: '#60564D', // faint / disabled
+  // High-contrast near-white text.
+  bone: '#FBFBF9', // primary text
+  boneDim: '#EDEDEA', // primary text over media
+  stone400: '#BDBBB6', // secondary text
+  stone500: '#8B8985', // muted text
+  stone600: '#585652', // faint / disabled
 
   // Default accent seed (warm honey/amber). Overridden per-person.
   amber: '#E2A86B',
