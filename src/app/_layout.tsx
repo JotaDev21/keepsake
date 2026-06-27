@@ -14,6 +14,7 @@ import { syncReminders } from '@/lib/notifications';
 import { prefs } from '@/lib/prefs';
 import { usePersonStore } from '@/stores/usePersonStore';
 import { useSyncStore } from '@/stores/useSyncStore';
+import { useSpotifyStore } from '@/stores/useSpotifyStore';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -72,9 +73,10 @@ function ThemedNavigator() {
     if (personId) syncReminders(personId).catch(() => {});
   }, [personId]);
 
-  // Connect cloud sync (anonymous auth + partner mood) once at startup.
+  // Connect cloud sync (anonymous auth + partner mood) + load Spotify state at startup.
   useEffect(() => {
     useSyncStore.getState().init();
+    useSpotifyStore.getState().load();
   }, []);
 
   const unlock = useCallback(async () => {
@@ -117,6 +119,7 @@ function ThemedNavigator() {
             <Stack.Screen name="cartas/escrever" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="ajustes" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="conexao" options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="musica" options={{ animation: 'slide_from_bottom' }} />
           </Stack.Protected>
           <Stack.Protected guard={!hasPerson}>
             <Stack.Screen name="onboarding" />

@@ -67,6 +67,26 @@ export default function Ajustes() {
         </Card>
 
         <Text variant="overline" color="textMuted" style={{ marginBottom: 12 }}>
+          Integrações
+        </Text>
+        <Card onPress={() => router.push('/musica')} accessibilityLabel="Música" style={{ marginBottom: 24 }}>
+          <View style={styles.row}>
+            <View style={[styles.glyph, { backgroundColor: theme.colors.accentSoft }]}>
+              <Icon name="music" size={18} color="accent" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text variant="callout" color="text">
+                Música (Spotify)
+              </Text>
+              <Text variant="subhead" color="textMuted" style={{ marginTop: 2 }}>
+                Música do dia e o que está tocando.
+              </Text>
+            </View>
+            <Icon name="chevron-right" size={20} color="textMuted" />
+          </View>
+        </Card>
+
+        <Text variant="overline" color="textMuted" style={{ marginBottom: 12 }}>
           Privacidade
         </Text>
         <Card>

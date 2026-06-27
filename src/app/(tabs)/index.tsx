@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { Image } from 'expo-image';
 import Animated from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 
@@ -15,6 +16,7 @@ import { usePersonStore } from '@/stores/usePersonStore';
 import { useMediaStore } from '@/stores/useMediaStore';
 import { useMoodStore } from '@/stores/useMoodStore';
 import { useSyncStore } from '@/stores/useSyncStore';
+import { useSpotifyStore } from '@/stores/useSpotifyStore';
 
 const moodLabel = (key: string) => moodScale.find((m) => m.key === key)?.label ?? key;
 
@@ -34,6 +36,7 @@ export default function HojeScreen() {
   const syncStatus = useSyncStore((s) => s.status);
   const paired = useSyncStore((s) => s.paired);
   const partnerMood = useSyncStore((s) => s.partnerMood);
+  const songOfDay = useSpotifyStore((s) => s.songOfDay);
 
   useEffect(() => {
     if (person) {
@@ -151,6 +154,30 @@ export default function HojeScreen() {
         </Animated.View>
       ) : null}
 
+      {songOfDay ? (
+        <Animated.View entering={enterRise(4)} style={styles.section}>
+          <Text variant="overline" color="accent" style={styles.kicker}>
+            Música do dia
+          </Text>
+          <Card onPress={() => router.push('/musica')}>
+            <View style={styles.partnerRow}>
+              {songOfDay.albumArt ? (
+                <Image source={songOfDay.albumArt} style={styles.albumArt} contentFit="cover" transition={200} />
+              ) : null}
+              <View style={{ flex: 1 }}>
+                <Text variant="callout" color="text" numberOfLines={1}>
+                  {songOfDay.name}
+                </Text>
+                <Text variant="subhead" color="textMuted" numberOfLines={1} style={{ marginTop: 2 }}>
+                  {songOfDay.artist}
+                </Text>
+              </View>
+              <Icon name="play" size={18} color="accent" />
+            </View>
+          </Card>
+        </Animated.View>
+      ) : null}
+
       {upcoming.length > 0 ? (
         <Animated.View entering={enterRise(3)} style={styles.section}>
           <Text variant="heading" color="text" style={{ marginBottom: 12 }}>
@@ -214,5 +241,6 @@ const styles = StyleSheet.create({
   partnerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   partnerDot: { width: 18, height: 18, borderRadius: 9 },
   partnerGlyph: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  albumArt: { width: 48, height: 48, borderRadius: 8 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
 });
