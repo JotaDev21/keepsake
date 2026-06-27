@@ -56,7 +56,13 @@
         }
       ],
       "./plugins/withGradleVersion",
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "O memory ev usa sua localização só para mostrar o clima de hoje."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

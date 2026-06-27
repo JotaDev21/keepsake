@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import Animated from 'react-native-reanimated';
@@ -12,6 +12,7 @@ import { formatLongDate, greetingForHour } from '@/lib/format';
 import { mediaUri } from '@/lib/media';
 import { memoryOfDay } from '@/lib/memory';
 import { moodColor, moodScale, startOfDay } from '@/lib/mood';
+import { getWeather, type Weather } from '@/lib/weather';
 import { usePersonStore } from '@/stores/usePersonStore';
 import { useMediaStore } from '@/stores/useMediaStore';
 import { useMoodStore } from '@/stores/useMoodStore';
@@ -37,6 +38,7 @@ export default function HojeScreen() {
   const paired = useSyncStore((s) => s.paired);
   const partnerMood = useSyncStore((s) => s.partnerMood);
   const songOfDay = useSpotifyStore((s) => s.songOfDay);
+  const [weather, setWeather] = useState<Weather | null>(null);
 
   useEffect(() => {
     if (person) {
@@ -44,6 +46,10 @@ export default function HojeScreen() {
       loadMood(person.id);
     }
   }, [person, loadMedia, loadMood]);
+
+  useEffect(() => {
+    getWeather().then(setWeather);
+  }, []);
 
   const moodIndex = moodToday ? moodScale.findIndex((m) => m.key === moodToday.humor) : null;
   const pickMood = (i: number) => {
@@ -81,6 +87,11 @@ export default function HojeScreen() {
         <Text variant="serif" color="textSecondary" style={{ marginTop: 4 }}>
           Um instante pra lembrar {person ? `de ${person.nome}` : 'dela'}.
         </Text>
+        {weather ? (
+          <View style={styles.weatherRow}>
+            <Chip label={`${weather.tempC}° · ${weather.description}`} icon={weather.icon} />
+          </View>
+        ) : null}
       </Animated.View>
 
       <Animated.View entering={enterRise(1)} style={styles.section}>
@@ -231,6 +242,7 @@ export default function HojeScreen() {
 
 const styles = StyleSheet.create({
   header: { marginTop: 8, marginBottom: 24 },
+  weatherRow: { flexDirection: 'row', marginTop: 14 },
   section: { marginBottom: 24 },
   kicker: { marginBottom: 10 },
   heroCard: { overflow: 'hidden' },
