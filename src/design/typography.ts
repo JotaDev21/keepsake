@@ -20,17 +20,18 @@ export const fonts = {
 } as const;
 
 /**
- * Type scale. Serif for the big emotional registers (display/title/quote),
- * sans for everything functional. Line-heights are generous on purpose.
+ * Type scale — "entardecer": intimate, not editorial. Titles speak close to
+ * you instead of shouting from a magazine cover; the hierarchy comes from the
+ * serif's warmth and generous air, not from sheer size. Line-heights breathe.
  */
 export const typography = {
-  hero: { fontFamily: fonts.serif, fontSize: 60, lineHeight: 62, letterSpacing: -1 },
-  display: { fontFamily: fonts.serif, fontSize: 46, lineHeight: 50, letterSpacing: -0.6 },
-  title1: { fontFamily: fonts.serifMedium, fontSize: 34, lineHeight: 40, letterSpacing: -0.4 },
-  title2: { fontFamily: fonts.serifMedium, fontSize: 24, lineHeight: 30, letterSpacing: -0.2 },
-  serif: { fontFamily: fonts.serif, fontSize: 19, lineHeight: 29, letterSpacing: 0 },
-  quote: { fontFamily: fonts.serifItalic, fontSize: 20, lineHeight: 31, letterSpacing: 0 },
-  heading: { fontFamily: fonts.sansSemibold, fontSize: 17, lineHeight: 24, letterSpacing: -0.1 },
+  hero: { fontFamily: fonts.serif, fontSize: 38, lineHeight: 46, letterSpacing: -0.4 },
+  display: { fontFamily: fonts.serif, fontSize: 31, lineHeight: 39, letterSpacing: -0.3 },
+  title1: { fontFamily: fonts.serifMedium, fontSize: 26, lineHeight: 33, letterSpacing: -0.2 },
+  title2: { fontFamily: fonts.serifMedium, fontSize: 20, lineHeight: 27, letterSpacing: -0.1 },
+  serif: { fontFamily: fonts.serif, fontSize: 18, lineHeight: 28, letterSpacing: 0 },
+  quote: { fontFamily: fonts.serifItalic, fontSize: 19, lineHeight: 30, letterSpacing: 0 },
+  heading: { fontFamily: fonts.sansSemibold, fontSize: 16, lineHeight: 23, letterSpacing: -0.1 },
   body: { fontFamily: fonts.sans, fontSize: 16, lineHeight: 25, letterSpacing: 0 },
   callout: { fontFamily: fonts.sansMedium, fontSize: 15, lineHeight: 22, letterSpacing: 0 },
   subhead: { fontFamily: fonts.sansMedium, fontSize: 14, lineHeight: 20, letterSpacing: 0 },
@@ -39,7 +40,7 @@ export const typography = {
     fontFamily: fonts.sansSemibold,
     fontSize: 11,
     lineHeight: 14,
-    letterSpacing: 2.4,
+    letterSpacing: 1.6,
     textTransform: 'uppercase',
   },
 } satisfies Record<string, TextStyle>;

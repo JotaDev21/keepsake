@@ -1,20 +1,39 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AppState } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { useFonts } from 'expo-font';
+import * as Notifications from 'expo-notifications';
+import * as ScreenCapture from 'expo-screen-capture';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { LightboxProvider, LockOverlay } from '@/components';
+import { AchievementReveal, LightboxProvider, LockOverlay } from '@/components';
 import { ThemeProvider, fontMap, useAccent, useTheme } from '@/design';
 import { authenticate } from '@/lib/auth';
-import { syncReminders } from '@/lib/notifications';
+import { registerRemoteNotifications, syncReminders } from '@/lib/notifications';
 import { prefs } from '@/lib/prefs';
+import { useAchievementStore } from '@/stores/useAchievementStore';
+import { useCareStore } from '@/stores/useCareStore';
+import { useGardenStore } from '@/stores/useGardenStore';
 import { usePersonStore } from '@/stores/usePersonStore';
 import { useSyncStore } from '@/stores/useSyncStore';
 import { useSpotifyStore } from '@/stores/useSpotifyStore';
+
+const visualAudit = process.env.EXPO_PUBLIC_VISUAL_AUDIT === '1';
+
+/** Route a notification tap to its ritual (capsule, humor, letters…). */
+function pushNotificationUrl(router: ReturnType<typeof useRouter>, response: Notifications.NotificationResponse | null) {
+  const url = response?.notification.request.content.data?.url;
+  if (typeof url === 'string' && url.length > 0) {
+    try {
+      router.push(url as never);
+    } catch {
+      // A stale link must never crash the launch.
+    }
+  }
+}
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -56,27 +75,59 @@ function ThemedRoot() {
 
 function ThemedNavigator() {
   const theme = useTheme();
+  const router = useRouter();
   const { setAccent } = useAccent();
   const accent = usePersonStore((s) => s.person?.accent);
   const personId = usePersonStore((s) => s.person?.id);
   const hasPerson = usePersonStore((s) => s.person != null);
+  const coupleId = useSyncStore((s) => s.coupleId);
+  const uid = useSyncStore((s) => s.uid);
+  const partnerId = useSyncStore((s) => s.partnerId);
 
   const [locked, setLocked] = useState(() => prefs.isAppLockEnabled());
+  const [covered, setCovered] = useState(false);
 
   // Keep the whole app re-tinted as the person's accent changes.
   useEffect(() => {
     if (accent) setAccent(accent);
   }, [accent, setAccent]);
 
-  // Schedule gentle local reminders (check-in, dates, capsules) once we have a person.
+  // Schedule gentle local reminders (check-in, dates, capsules) once we have a
+  // person, and record today's visit so the garden grows from just showing up.
   useEffect(() => {
-    if (personId) syncReminders(personId).catch(() => {});
+    if (personId) {
+      syncReminders(personId).catch(() => {});
+      useGardenStore.getState().water(personId).catch(() => {});
+    }
   }, [personId]);
 
   // Connect cloud sync (anonymous auth + partner mood) + load Spotify state at startup.
   useEffect(() => {
-    useSyncStore.getState().init();
-    useSpotifyStore.getState().load();
+    useSyncStore
+      .getState()
+      .init()
+      .then(() => registerRemoteNotifications())
+      .catch(() => {});
+    useSpotifyStore.getState().load().catch(() => {});
+  }, []);
+
+  // Couple milestones stay live on either phone and retry quietly offline.
+  useEffect(() => {
+    useAchievementStore.getState().connect(coupleId, uid).catch(() => {});
+  }, [coupleId, uid]);
+
+  // Self-care remains local before pairing and mirrors only after explicit consent.
+  useEffect(() => {
+    useCareStore.getState().hydrate();
+    useCareStore.getState().connect(coupleId, uid, partnerId).catch(() => {});
+  }, [coupleId, partnerId, uid]);
+
+  // A tapped notification lands on its ritual — both warm (app open) and cold starts.
+  useEffect(() => {
+    Notifications.getLastNotificationResponseAsync().then((r) => pushNotificationUrl(router, r));
+    const sub = Notifications.addNotificationResponseReceivedListener((r) => pushNotificationUrl(router, r));
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const unlock = useCallback(async () => {
@@ -90,10 +141,38 @@ function ThemedNavigator() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Re-lock whenever the app is backgrounded (if the lock is on).
+  // With the lock on, keep the app out of screenshots and the switcher
+  // snapshot (Android FLAG_SECURE). Best-effort — not all devices support it.
+  useEffect(() => {
+    if (visualAudit) {
+      ScreenCapture.allowScreenCaptureAsync().catch(() => {});
+    } else if (prefs.isAppLockEnabled()) {
+      ScreenCapture.preventScreenCaptureAsync().catch(() => {});
+    }
+  }, []);
+
+  // Lifecycle: cover the content the moment the app leaves the screen (so the
+  // switcher snapshot shows nothing), re-lock on background, and catch up with
+  // her side + water the garden when coming back.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'background' && prefs.isAppLockEnabled()) setLocked(true);
+      if (state === 'inactive') {
+        setCovered(true);
+      } else if (state === 'background') {
+        setCovered(true);
+        if (prefs.isAppLockEnabled()) setLocked(true);
+      } else if (state === 'active') {
+        setCovered(false);
+        useSyncStore.getState().onForeground();
+        const sync = useSyncStore.getState();
+        useAchievementStore.getState().connect(sync.coupleId, sync.uid).catch(() => {});
+        useCareStore.getState().connect(sync.coupleId, sync.uid, sync.partnerId).catch(() => {});
+        registerRemoteNotifications().catch(() => {});
+        const pid = usePersonStore.getState().person?.id;
+        // Watering on every return makes "just showing up" count even when the
+        // app slept over midnight in the background.
+        if (pid) useGardenStore.getState().water(pid).catch(() => {});
+      }
     });
     return () => sub.remove();
   }, []);
@@ -101,7 +180,7 @@ function ThemedNavigator() {
   return (
     <>
       <LightboxProvider>
-        <StatusBar style="light" />
+        <StatusBar style={theme.dark ? 'light' : 'dark'} />
         <Stack
           screenOptions={{
             headerShown: false,
@@ -112,13 +191,20 @@ function ThemedNavigator() {
           <Stack.Protected guard={hasPerson}>
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="memoria/[id]" />
+            <Stack.Screen name="memorias-compartilhadas" />
+            <Stack.Screen name="memoria-compartilhada/[id]" />
             <Stack.Screen name="carta/[id]" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="editar-perfil" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="gravar-audio" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="cartas/index" />
             <Stack.Screen name="cartas/escrever" options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="motivos" options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="gratidao" options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="pergunta" options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="conquistas" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="ajustes" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="conexao" options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="meu-perfil" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="musica" options={{ animation: 'slide_from_bottom' }} />
           </Stack.Protected>
           <Stack.Protected guard={!hasPerson}>
@@ -126,7 +212,8 @@ function ThemedNavigator() {
           </Stack.Protected>
         </Stack>
       </LightboxProvider>
-      {locked ? <LockOverlay onUnlock={unlock} /> : null}
+      <AchievementReveal />
+      {locked ? <LockOverlay onUnlock={unlock} /> : covered ? <LockOverlay cover /> : null}
     </>
   );
 }

@@ -5,6 +5,7 @@ import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 import { spacing, useTheme } from '@/design';
 
 import { useTabBarSpace } from './tabBarLayout';
+import { Atmosphere } from './Atmosphere';
 
 interface ScreenProps {
   children: ReactNode;
@@ -12,15 +13,15 @@ interface ScreenProps {
   scroll?: boolean;
   /** Apply horizontal page padding (theme.spacing.lg). */
   padded?: boolean;
-  /** Safe-area edges to inset. Bottom is handled by the floating tab bar. */
+  /** Safe-area edges to inset. Bottom is handled by the tab dock. */
   edges?: readonly Edge[];
-  /** Leave bottom space so content clears the floating tab bar. */
+  /** Leave bottom space so content clears the grounded tab dock. */
   tabBarPadding?: boolean;
   contentContainerStyle?: StyleProp<ViewStyle>;
   style?: StyleProp<ViewStyle>;
 }
 
-/** The page shell: pure-black editorial background, safe-area aware, optional scroll. */
+/** The page shell: warm entardecer background, safe-area aware, optional scroll. */
 export function Screen({
   children,
   scroll = false,
@@ -39,15 +40,22 @@ export function Screen({
   };
 
   return (
-    <SafeAreaView edges={edges} style={[styles.root, { backgroundColor: theme.colors.background }, style]}>
-      {scroll ? (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[pad, contentContainerStyle]}>
-          {children}
-        </ScrollView>
-      ) : (
-        <View style={[styles.fill, pad, contentContainerStyle]}>{children}</View>
-      )}
-    </SafeAreaView>
+    <View style={[styles.root, { backgroundColor: theme.colors.background }, style]}>
+      <Atmosphere />
+      <SafeAreaView edges={edges} style={styles.fill}>
+        {scroll ? (
+          <ScrollView
+            contentInsetAdjustmentBehavior="automatic"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={[pad, contentContainerStyle]}
+          >
+            {children}
+          </ScrollView>
+        ) : (
+          <View style={[styles.fill, pad, contentContainerStyle]}>{children}</View>
+        )}
+      </SafeAreaView>
+    </View>
   );
 }
 

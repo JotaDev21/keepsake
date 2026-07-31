@@ -16,14 +16,13 @@ async function init(): Promise<SQLiteDatabase> {
   for (let v = current + 1; v <= SCHEMA_VERSION; v++) {
     const sql = MIGRATIONS[v];
     if (!sql) continue;
+    // The version bump rides in the same transaction as the migration, so an
+    // interrupted upgrade can never leave the DB claiming a version it isn't.
+    // (PRAGMA can't be parameterized; v is a trusted integer constant.)
     await db.withTransactionAsync(async () => {
       await db.execAsync(sql);
+      await db.execAsync(`PRAGMA user_version = ${v};`);
     });
-  }
-
-  if (current < SCHEMA_VERSION) {
-    // PRAGMA can't be parameterized; SCHEMA_VERSION is a trusted integer constant.
-    await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION};`);
   }
 
   return db;

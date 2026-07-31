@@ -1,6 +1,7 @@
 import type {
   Fact,
   FactDraft,
+  Gratitude,
   ImportantDate,
   ImportantDateDraft,
   Letter,
@@ -12,6 +13,8 @@ import type {
   MoodEntryDraft,
   Person,
   PersonCore,
+  Reason,
+  ReceivedLetter,
 } from '@/types/models';
 
 import { getDb } from './index';
@@ -57,6 +60,8 @@ interface MediaRow {
   data_memoria: number | null;
   local: string | null;
   criado_em: number;
+  shared: number;
+  remote_id: string | null;
 }
 
 const toPerson = (r: PersonRow): Person => ({
@@ -98,6 +103,8 @@ const toMedia = (r: MediaRow): MediaItem => ({
   dataMemoria: r.data_memoria,
   local: r.local,
   criadoEm: r.criado_em,
+  shared: r.shared === 1,
+  remoteId: r.remote_id,
 });
 
 /* --------------------------------------------------------------- person */
@@ -232,8 +239,11 @@ export const mediaRepo = {
   async create(input: MediaCreate): Promise<number> {
     const db = await getDb();
     const res = await db.runAsync(
-      `INSERT INTO media_item (person_id, tipo, file, thumb_file, legenda, data_memoria, local, criado_em)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
+      `INSERT INTO media_item (
+         person_id, tipo, file, thumb_file, legenda, data_memoria, local,
+         criado_em, shared, remote_id
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
       input.personId,
       input.tipo,
       input.file,
@@ -242,6 +252,8 @@ export const mediaRepo = {
       input.dataMemoria,
       input.local,
       Date.now(),
+      input.shared ? 1 : 0,
+      input.remoteId ?? null,
     );
     return res.lastInsertRowId;
   },
@@ -249,6 +261,16 @@ export const mediaRepo = {
   async delete(id: number): Promise<void> {
     const db = await getDb();
     await db.runAsync('DELETE FROM media_item WHERE id = ?;', id);
+  },
+
+  async setShared(id: number, shared: boolean, remoteId: string | null): Promise<void> {
+    const db = await getDb();
+    await db.runAsync(
+      'UPDATE media_item SET shared = ?, remote_id = ? WHERE id = ?;',
+      shared ? 1 : 0,
+      remoteId,
+      id,
+    );
   },
 };
 
@@ -305,6 +327,16 @@ export const moodRepo = {
     );
   },
 
+  /** Every registered day (start-of-day ms) — cheap, for true streak/count. */
+  async listDays(personId: number): Promise<number[]> {
+    const db = await getDb();
+    const rows = await db.getAllAsync<{ dia: number }>(
+      'SELECT dia FROM mood_entry WHERE person_id = ? ORDER BY dia;',
+      personId,
+    );
+    return rows.map((r) => r.dia);
+  },
+
   /** Entries within [fromDia, toDia], oldest first (for the history calendar). */
   async listRange(personId: number, fromDia: number, toDia: number): Promise<MoodEntry[]> {
     const db = await getDb();
@@ -327,6 +359,9 @@ interface LetterRow {
   corpo: string;
   abrir_em: number | null;
   aberta: number;
+  direcao: string;
+  remote_id: string | null;
+  lida: number;
   criado_em: number;
 }
 
@@ -337,6 +372,9 @@ const toLetter = (r: LetterRow): Letter => ({
   corpo: r.corpo,
   abrirEm: r.abrir_em,
   aberta: r.aberta === 1,
+  direcao: r.direcao === 'recebida' ? 'recebida' : 'minha',
+  remoteId: r.remote_id,
+  lida: r.lida === 1,
   criadoEm: r.criado_em,
 });
 
@@ -369,6 +407,49 @@ export const letterRepo = {
     return res.lastInsertRowId;
   },
 
+  /** Store a letter that arrived from the partner. No-op if already imported. */
+  async insertReceived(personId: number, l: ReceivedLetter): Promise<boolean> {
+    const db = await getDb();
+    const res = await db.runAsync(
+      `INSERT OR IGNORE INTO letter (person_id, titulo, corpo, abrir_em, aberta, direcao, remote_id, criado_em)
+       VALUES (?, ?, ?, ?, ?, 'recebida', ?, ?);`,
+      personId,
+      l.titulo,
+      l.corpo,
+      l.abrirEm,
+      l.aberta ? 1 : 0,
+      l.remoteId,
+      l.criadoEm,
+    );
+    return res.changes > 0;
+  },
+
+  /** Remote ids already present locally (both sent-and-synced and received). */
+  async listRemoteIds(personId: number): Promise<Set<string>> {
+    const db = await getDb();
+    const rows = await db.getAllAsync<{ remote_id: string }>(
+      'SELECT remote_id FROM letter WHERE person_id = ? AND remote_id IS NOT NULL;',
+      personId,
+    );
+    return new Set(rows.map((r) => r.remote_id));
+  },
+
+  /** Link a locally written letter to its mirrored row on the server. */
+  async setRemoteId(id: number, remoteId: string): Promise<void> {
+    const db = await getDb();
+    await db.runAsync('UPDATE letter SET remote_id = ? WHERE id = ?;', remoteId, id);
+  },
+
+  /** The partner opened a letter we sent. Returns whether anything changed. */
+  async markLidaByRemote(remoteId: string): Promise<boolean> {
+    const db = await getDb();
+    const res = await db.runAsync(
+      "UPDATE letter SET lida = 1 WHERE remote_id = ? AND direcao = 'minha' AND lida = 0;",
+      remoteId,
+    );
+    return res.changes > 0;
+  },
+
   async markOpened(id: number): Promise<void> {
     const db = await getDb();
     await db.runAsync('UPDATE letter SET aberta = 1 WHERE id = ?;', id);
@@ -377,5 +458,194 @@ export const letterRepo = {
   async delete(id: number): Promise<void> {
     const db = await getDb();
     await db.runAsync('DELETE FROM letter WHERE id = ?;', id);
+  },
+};
+
+/* ---------------------------------------------------------------- garden */
+
+export const visitRepo = {
+  /** Mark a day as "shown up". No-op if already recorded (one per day). */
+  async record(personId: number, dia: number): Promise<void> {
+    const db = await getDb();
+    await db.runAsync(
+      'INSERT OR IGNORE INTO day_visit (person_id, dia, criado_em) VALUES (?, ?, ?);',
+      personId,
+      dia,
+      Date.now(),
+    );
+  },
+
+  /** All visited days (start-of-day epoch ms), oldest first. */
+  async listDays(personId: number): Promise<number[]> {
+    const db = await getDb();
+    const rows = await db.getAllAsync<{ dia: number }>(
+      'SELECT dia FROM day_visit WHERE person_id = ? ORDER BY dia;',
+      personId,
+    );
+    return rows.map((r) => r.dia);
+  },
+};
+
+/* ----------------------------------------------------------------- water */
+
+export const waterRepo = {
+  /** Total ml drunk on a day (start-of-day epoch ms). */
+  async get(personId: number, dia: number): Promise<number> {
+    const db = await getDb();
+    const row = await db.getFirstAsync<{ ml: number }>(
+      'SELECT ml FROM water_day WHERE person_id = ? AND dia = ?;',
+      personId,
+      dia,
+    );
+    return row?.ml ?? 0;
+  },
+
+  /** Add (or subtract) ml for a day, clamped at zero. Returns the new total. */
+  async add(personId: number, dia: number, deltaMl: number): Promise<number> {
+    const db = await getDb();
+    await db.runAsync(
+      `INSERT INTO water_day (person_id, dia, ml, criado_em) VALUES (?, ?, MAX(0, ?), ?)
+       ON CONFLICT(person_id, dia) DO UPDATE SET ml = MAX(0, water_day.ml + ?);`,
+      personId,
+      dia,
+      deltaMl,
+      Date.now(),
+      deltaMl,
+    );
+    return waterRepo.get(personId, dia);
+  },
+};
+
+/* ------------------------------------------------------- pergunta do dia */
+
+export interface DayQuestion {
+  dia: number;
+  pergunta: string;
+  resposta: string | null;
+}
+
+export const questionRepo = {
+  async get(personId: number, dia: number): Promise<DayQuestion | null> {
+    const db = await getDb();
+    const row = await db.getFirstAsync<{ dia: number; pergunta: string; resposta: string | null }>(
+      'SELECT dia, pergunta, resposta FROM question_answer WHERE person_id = ? AND dia = ?;',
+      personId,
+      dia,
+    );
+    return row ?? null;
+  },
+
+  /** Store the day's question (idempotent — keeps an existing answer). */
+  async setQuestion(personId: number, dia: number, pergunta: string): Promise<void> {
+    const db = await getDb();
+    await db.runAsync(
+      `INSERT INTO question_answer (person_id, dia, pergunta, criado_em) VALUES (?, ?, ?, ?)
+       ON CONFLICT(person_id, dia) DO NOTHING;`,
+      personId,
+      dia,
+      pergunta,
+      Date.now(),
+    );
+  },
+
+  async answer(personId: number, dia: number, resposta: string): Promise<void> {
+    const db = await getDb();
+    await db.runAsync(
+      'UPDATE question_answer SET resposta = ? WHERE person_id = ? AND dia = ?;',
+      resposta,
+      personId,
+      dia,
+    );
+  },
+};
+
+/* --------------------------------------------------------------- reasons */
+
+interface ReasonRow {
+  id: number;
+  person_id: number;
+  texto: string;
+  criado_em: number;
+}
+
+const toReason = (r: ReasonRow): Reason => ({
+  id: r.id,
+  personId: r.person_id,
+  texto: r.texto,
+  criadoEm: r.criado_em,
+});
+
+export const reasonRepo = {
+  async listByPerson(personId: number): Promise<Reason[]> {
+    const db = await getDb();
+    const rows = await db.getAllAsync<ReasonRow>(
+      'SELECT * FROM reason WHERE person_id = ? ORDER BY criado_em DESC, id DESC;',
+      personId,
+    );
+    return rows.map(toReason);
+  },
+
+  async create(personId: number, texto: string): Promise<number> {
+    const db = await getDb();
+    const res = await db.runAsync(
+      'INSERT INTO reason (person_id, texto, criado_em) VALUES (?, ?, ?);',
+      personId,
+      texto,
+      Date.now(),
+    );
+    return res.lastInsertRowId;
+  },
+
+  async delete(id: number): Promise<void> {
+    const db = await getDb();
+    await db.runAsync('DELETE FROM reason WHERE id = ?;', id);
+  },
+};
+
+/* ------------------------------------------------------------- gratitude */
+
+interface GratitudeRow {
+  id: number;
+  person_id: number;
+  dia: number;
+  texto: string;
+  criado_em: number;
+}
+
+const toGratitude = (r: GratitudeRow): Gratitude => ({
+  id: r.id,
+  personId: r.person_id,
+  dia: r.dia,
+  texto: r.texto,
+  criadoEm: r.criado_em,
+});
+
+export const gratitudeRepo = {
+  /** Most recent entries, newest first (across all days). */
+  async listRecent(personId: number, limit = 60): Promise<Gratitude[]> {
+    const db = await getDb();
+    const rows = await db.getAllAsync<GratitudeRow>(
+      'SELECT * FROM gratitude WHERE person_id = ? ORDER BY dia DESC, criado_em DESC LIMIT ?;',
+      personId,
+      limit,
+    );
+    return rows.map(toGratitude);
+  },
+
+  async create(personId: number, dia: number, texto: string): Promise<number> {
+    const db = await getDb();
+    const res = await db.runAsync(
+      'INSERT INTO gratitude (person_id, dia, texto, criado_em) VALUES (?, ?, ?, ?);',
+      personId,
+      dia,
+      texto,
+      Date.now(),
+    );
+    return res.lastInsertRowId;
+  },
+
+  async delete(id: number): Promise<void> {
+    const db = await getDb();
+    await db.runAsync('DELETE FROM gratitude WHERE id = ?;', id);
   },
 };

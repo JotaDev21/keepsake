@@ -11,6 +11,18 @@ export async function pickImage(): Promise<string | null> {
   return result.assets[0].uri;
 }
 
+/** Pick a restrained square portrait for the private couple identity. */
+export async function pickIdentityAvatar(): Promise<string | null> {
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images'],
+    quality: 0.65,
+    allowsEditing: true,
+    aspect: [1, 1],
+  });
+  if (result.canceled || !result.assets.length) return null;
+  return result.assets[0].uri;
+}
+
 export interface PickedMedia {
   uri: string;
   kind: 'foto' | 'video';

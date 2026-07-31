@@ -12,22 +12,26 @@ const HISTORY_DAYS = 42;
 interface MoodState {
   today: MoodEntry | null;
   history: MoodEntry[];
+  /** Every registered day ever (start-of-day ms) — true totals/streaks. */
+  allDays: number[];
   load: (personId: number) => Promise<void>;
   save: (personId: number, draft: MoodEntryDraft) => Promise<void>;
 }
 
 async function refresh(personId: number) {
   const today = startOfDay();
-  const [t, h] = await Promise.all([
+  const [t, h, allDays] = await Promise.all([
     moodRepo.getByDay(personId, today),
     moodRepo.listRange(personId, today - (HISTORY_DAYS - 1) * DAY, today),
+    moodRepo.listDays(personId),
   ]);
-  return { today: t, history: h };
+  return { today: t, history: h, allDays };
 }
 
 export const useMoodStore = create<MoodState>((set) => ({
   today: null,
   history: [],
+  allDays: [],
 
   load: async (personId) => {
     try {

@@ -1,22 +1,40 @@
 import 'react-native-url-polyfill/auto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import * as SecureStore from 'expo-secure-store';
 import { Storage } from 'expo-sqlite/kv-store';
 
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-/** Whether sync credentials are present (app still works fully offline without them). */
 export const isSupabaseConfigured = Boolean(url && anonKey);
 
-/**
- * The Supabase client, or null when not configured. Auth session is persisted
- * in the local kv-store (expo-sqlite). The anon key is public by design — data
- * is protected by Row Level Security on the server.
- */
+/** OS-protected auth storage with a one-time migration from older builds. */
+const secureAuthStorage = {
+  async getItem(key: string): Promise<string | null> {
+    const protectedValue = await SecureStore.getItemAsync(key);
+    if (protectedValue != null) return protectedValue;
+
+    const legacyValue = Storage.getItemSync(key);
+    if (legacyValue == null) return null;
+    await SecureStore.setItemAsync(key, legacyValue);
+    Storage.removeItemSync(key);
+    return legacyValue;
+  },
+  async setItem(key: string, value: string): Promise<void> {
+    await SecureStore.setItemAsync(key, value);
+    Storage.removeItemSync(key);
+  },
+  async removeItem(key: string): Promise<void> {
+    await SecureStore.deleteItemAsync(key);
+    Storage.removeItemSync(key);
+  },
+};
+
+/** Supabase is optional: without credentials, the app remains fully local. */
 export const supabase: SupabaseClient | null = isSupabaseConfigured
   ? createClient(url as string, anonKey as string, {
       auth: {
-        storage: Storage,
+        storage: secureAuthStorage,
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: false,

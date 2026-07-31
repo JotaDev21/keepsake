@@ -33,9 +33,27 @@ export async function saveMedia(sourceUri: string, fallbackExt: string): Promise
   return filename;
 }
 
+/** Download remote media into the private app sandbox; returns its stored filename. */
+export async function downloadMedia(sourceUrl: string, fallbackExt: string): Promise<string> {
+  const dir = mediaDir();
+  const filename = `${token()}.${extFromUri(sourceUrl, fallbackExt)}`;
+  const destination = new File(dir, filename);
+  try {
+    await File.downloadFileAsync(sourceUrl, destination);
+    return filename;
+  } catch (error) {
+    if (destination.exists) destination.delete();
+    throw error;
+  }
+}
+
 /** Absolute uri for a stored media filename. */
 export function mediaUri(filename: string): string {
   return new File(new Directory(Paths.document, MEDIA_DIRNAME), filename).uri;
+}
+
+export function mediaExists(filename: string): boolean {
+  return new File(new Directory(Paths.document, MEDIA_DIRNAME), filename).exists;
 }
 
 /** Delete a stored media file (no-op if missing). */

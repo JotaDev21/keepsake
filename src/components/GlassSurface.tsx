@@ -3,7 +3,7 @@ import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'reac
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { radius as radiusTokens, useTheme, withAlpha, type BlurToken } from '@/design';
+import { radius as radiusTokens, useTheme, type BlurToken } from '@/design';
 
 interface GlassSurfaceProps {
   children: ReactNode;
@@ -53,7 +53,11 @@ export function GlassSurface({
     >
       {isIOS ? (
         <>
-          <BlurView intensity={blurIntensity} tint="dark" style={StyleSheet.absoluteFill} />
+          <BlurView
+            intensity={blurIntensity}
+            tint={theme.dark ? 'dark' : 'light'}
+            style={StyleSheet.absoluteFill}
+          />
           <View
             style={[
               StyleSheet.absoluteFill,
@@ -70,7 +74,7 @@ export function GlassSurface({
             ]}
           />
           <LinearGradient
-            colors={[withAlpha('#FFFFFF', 0.06), 'transparent']}
+            colors={[theme.colors.surfaceHighlight, 'transparent']}
             style={StyleSheet.absoluteFill}
             pointerEvents="none"
           />

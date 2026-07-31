@@ -183,7 +183,9 @@ function Overlay({ item, progress, dragX, dragY, onClose }: OverlayProps) {
         onPress={onClose}
       />
       <GestureDetector gesture={pan}>
-        <Animated.View style={[styles.frame, frameStyle]}>
+        <Animated.View
+          style={[styles.frame, { backgroundColor: theme.colors.backgroundDeep }, frameStyle]}
+        >
           <Image
             source={item.uri}
             style={StyleSheet.absoluteFill}
@@ -206,7 +208,7 @@ interface LightboxImageProps {
  * A measurable thumbnail that opens into the lightbox on tap. It captures its
  * on-screen rect so the hero can grow from exactly where it sits.
  */
-export function LightboxImage({ uri, style, radius = radiusTokens.md }: LightboxImageProps) {
+export function LightboxImage({ uri, style, radius = radiusTokens.lg }: LightboxImageProps) {
   const ref = useRef<View>(null);
   const { open } = useLightbox();
 
@@ -236,6 +238,5 @@ const styles = StyleSheet.create({
   frame: {
     position: 'absolute',
     overflow: 'hidden',
-    backgroundColor: '#000',
   },
 });

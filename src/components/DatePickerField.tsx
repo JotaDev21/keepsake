@@ -39,7 +39,7 @@ export function DatePickerField({ value, onChange, label }: DatePickerFieldProps
   return (
     <View>
       {label ? (
-        <Text variant="overline" color="textMuted" style={styles.label}>
+        <Text variant="overline" color="accent" style={styles.label}>
           {label}
         </Text>
       ) : null}
@@ -82,6 +82,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+    minHeight: 52,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     borderWidth: StyleSheet.hairlineWidth,

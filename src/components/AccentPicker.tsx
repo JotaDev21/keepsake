@@ -1,21 +1,10 @@
 import { StyleSheet, View } from 'react-native';
 
-import { useTheme } from '@/design';
+import { accentPresets, radius as radiusTokens, spacing, useTheme } from '@/design';
 import { haptics } from '@/lib/haptics';
 
+import { Icon } from './Icon';
 import { PressableScale } from './PressableScale';
-
-/** Curated, warm-leaning accent hues — the person's color. */
-const ACCENTS = [
-  '#E2A86B',
-  '#D98C90',
-  '#CE8E72',
-  '#C9A86B',
-  '#9FB59A',
-  '#8FB3C9',
-  '#AEA6D6',
-  '#C98AB0',
-];
 
 interface AccentPickerProps {
   value: string;
@@ -27,7 +16,7 @@ export function AccentPicker({ value, onChange }: AccentPickerProps) {
 
   return (
     <View style={styles.row}>
-      {ACCENTS.map((c) => {
+      {accentPresets.map((c) => {
         const active = value.toLowerCase() === c.toLowerCase();
         return (
           <PressableScale
@@ -40,8 +29,14 @@ export function AccentPicker({ value, onChange }: AccentPickerProps) {
             scaleTo={0.85}
             accessibilityLabel={`Cor ${c}`}
           >
-            <View style={[styles.ring, { borderColor: active ? theme.colors.text : 'transparent' }]}>
-              <View style={[styles.disc, { backgroundColor: c }]} />
+            <View
+              style={[styles.ring, { borderColor: active ? theme.colors.accentEdge : 'transparent' }]}
+            >
+              <View style={[styles.disc, { backgroundColor: c, borderColor: theme.colors.border }]}>
+                {/* The swatch shows the RAW hue in both modes, so the check
+                    needs a fixed dark ink — day-mode onAccent (cream) vanishes. */}
+                {active ? <Icon name="check" size={18} color="seedDeep" /> : null}
+              </View>
             </View>
           </PressableScale>
         );
@@ -51,8 +46,21 @@ export function AccentPicker({ value, onChange }: AccentPickerProps) {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   // Constant-size ring so selecting adds a halo instead of shrinking the disc.
-  ring: { padding: 3, borderWidth: 2, borderRadius: 25, alignItems: 'center', justifyContent: 'center' },
-  disc: { width: 40, height: 40, borderRadius: 20 },
+  ring: {
+    padding: 3,
+    borderWidth: 2,
+    borderRadius: radiusTokens.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  disc: {
+    width: 40,
+    height: 40,
+    borderRadius: radiusTokens.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

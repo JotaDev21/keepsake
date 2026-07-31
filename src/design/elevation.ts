@@ -8,25 +8,13 @@ import type { ViewStyle } from 'react-native';
 export const elevation = {
   none: {} as ViewStyle,
   low: {
-    shadowColor: '#000000',
-    shadowOpacity: 0.22,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
+    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.24)',
   } as ViewStyle,
   medium: {
-    shadowColor: '#000000',
-    shadowOpacity: 0.3,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 12,
+    boxShadow: '0 14px 38px rgba(0, 0, 0, 0.32)',
   } as ViewStyle,
   high: {
-    shadowColor: '#000000',
-    shadowOpacity: 0.4,
-    shadowRadius: 40,
-    shadowOffset: { width: 0, height: 20 },
-    elevation: 22,
+    boxShadow: '0 22px 60px rgba(0, 0, 0, 0.42)',
   } as ViewStyle,
 } as const;
 

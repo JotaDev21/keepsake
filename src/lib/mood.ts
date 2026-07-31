@@ -1,4 +1,5 @@
 /** The mood model: a calm 5-level scale + feeling tags + intensity (1–5). */
+import { moodColors } from '@/design';
 
 export interface MoodStep {
   key: string;
@@ -8,11 +9,11 @@ export interface MoodStep {
 
 /** The 5-level emotional weather. Confirmed format: humor + intensidade + nota + tags. */
 export const moodScale: MoodStep[] = [
-  { key: 'pesado', label: 'Pesado', color: '#6C7A89' },
-  { key: 'quieto', label: 'Quieto', color: '#7E8BA3' },
-  { key: 'sereno', label: 'Sereno', color: '#9FB59A' },
-  { key: 'leve', label: 'Leve', color: '#E2C275' },
-  { key: 'radiante', label: 'Radiante', color: '#E0A86B' },
+  { key: 'pesado', label: 'Pesado', color: moodColors.pesado },
+  { key: 'quieto', label: 'Quieto', color: moodColors.quieto },
+  { key: 'sereno', label: 'Sereno', color: moodColors.sereno },
+  { key: 'leve', label: 'Leve', color: moodColors.leve },
+  { key: 'radiante', label: 'Radiante', color: moodColors.radiante },
 ];
 
 export interface FeelingTag {
@@ -41,7 +42,7 @@ export function startOfDay(d: Date = new Date()): number {
 
 /** Color for a mood key (falls back to a muted tone). */
 export function moodColor(key: string | null | undefined): string {
-  return moodScale.find((m) => m.key === key)?.color ?? '#8C8074';
+  return moodScale.find((m) => m.key === key)?.color ?? moodColors.fallback;
 }
 
 /** Index of a mood key in the scale, or null. */

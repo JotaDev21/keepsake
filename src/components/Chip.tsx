@@ -14,7 +14,7 @@ interface ChipProps {
   onPress?: () => void;
 }
 
-/** A small pill — filters, tags, countdown badges. */
+/** A small warm pill — filters, tags, countdown badges. */
 export function Chip({ label, icon, selected = false, onPress }: ChipProps) {
   const theme = useTheme();
   const fg = selected ? 'accent' : 'textSecondary';
@@ -24,8 +24,12 @@ export function Chip({ label, icon, selected = false, onPress }: ChipProps) {
       style={[
         styles.chip,
         {
-          backgroundColor: selected ? theme.colors.accentSoft : theme.colors.surfaceElevated,
-          borderColor: selected ? theme.colors.accent : theme.colors.border,
+          backgroundColor: selected ? theme.colors.accentSoft : theme.colors.surface,
+          experimental_backgroundImage: selected
+            ? `linear-gradient(145deg, ${theme.colors.accentSoft} 0%, ${theme.colors.surface} 140%)`
+            : `linear-gradient(145deg, ${theme.colors.surfaceElevated} 0%, ${theme.colors.surface} 100%)`,
+          borderColor: selected ? theme.colors.accentEdge : theme.colors.border,
+          boxShadow: selected ? `0 5px 14px ${theme.colors.accentSoft}` : undefined,
         },
       ]}
     >
@@ -53,6 +57,7 @@ const styles = StyleSheet.create({
     height: 34,
     paddingHorizontal: 14,
     borderRadius: radiusTokens.pill,
+    borderCurve: 'continuous',
     borderWidth: StyleSheet.hairlineWidth,
   },
 });

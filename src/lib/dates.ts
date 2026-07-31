@@ -39,3 +39,39 @@ export function countdownLabel(dateMs: number, recorrente: boolean): string {
   if (days === -1) return 'ontem';
   return `há ${-days} dias`;
 }
+
+/** How old a day (start-of-day ms) is: "hoje", "ontem", "há N dias". */
+export function dayAgeLabel(diaMs: number): string {
+  const d = new Date(diaMs);
+  const today = startOfToday();
+  const days = Math.round((today.getTime() - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / DAY_MS);
+  if (days <= 0) return 'hoje';
+  if (days === 1) return 'ontem';
+  return `há ${days} dias`;
+}
+
+/** How long ago a moment was, softly: "agora há pouco", "há 20 min", "há 3 h", "ontem". */
+export function momentAgeLabel(ms: number): string {
+  const diff = Date.now() - ms;
+  if (diff < 15 * 60000) return 'agora há pouco';
+  if (diff < 60 * 60000) return `há ${Math.round(diff / 60000)} min`;
+  if (new Date(ms).getTime() >= startOfToday().getTime()) return `há ${Math.round(diff / 3600000)} h`;
+  return 'ontem';
+}
+
+/** Deliberately coarse presence: enough to feel proximity, never a precise activity log. */
+export function presenceLabel(ms: number | null, now = Date.now()): string {
+  if (!ms) return 'presença ainda não disponível';
+  const diff = Math.max(0, now - ms);
+  if (diff < 2 * 60000) return 'por aqui agora';
+
+  const seen = new Date(ms);
+  const current = new Date(now);
+  const seenDay = new Date(seen.getFullYear(), seen.getMonth(), seen.getDate()).getTime();
+  const currentDay = new Date(current.getFullYear(), current.getMonth(), current.getDate()).getTime();
+  const days = Math.round((currentDay - seenDay) / DAY_MS);
+  if (days <= 0) return 'passou por aqui hoje';
+  if (days === 1) return 'passou por aqui ontem';
+  if (days <= 7) return `passou por aqui há ${days} dias`;
+  return 'esteve por aqui recentemente';
+}

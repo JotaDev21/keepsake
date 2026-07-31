@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 
-import { useTheme } from '@/design';
+import { radius as radiusTokens, spacing, useTheme } from '@/design';
 import { haptics } from '@/lib/haptics';
 
 import { Icon } from './Icon';
@@ -52,7 +52,11 @@ export function AudioPlayer({ uri }: AudioPlayerProps) {
         onPress={toggle}
         haptic={false}
         accessibilityLabel={status.playing ? 'Pausar' : 'Tocar'}
-        style={[styles.btn, { backgroundColor: theme.colors.accent }]}
+        style={[
+          styles.btn,
+          { backgroundColor: theme.colors.accent, borderRadius: radiusTokens.pill },
+          theme.elevation.low,
+        ]}
       >
         <Icon name={status.playing ? 'pause' : 'play'} size={20} color="onAccent" />
       </PressableScale>
@@ -64,7 +68,7 @@ export function AudioPlayer({ uri }: AudioPlayerProps) {
             style={{
               width: 3,
               height: 30 * h,
-              borderRadius: 2,
+              borderRadius: radiusTokens.pill,
               backgroundColor: i / BARS <= progress ? theme.colors.accent : theme.colors.borderStrong,
             }}
           />
@@ -79,8 +83,8 @@ export function AudioPlayer({ uri }: AudioPlayerProps) {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  btn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  btn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   wave: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 32 },
   time: { width: 38, textAlign: 'right' },
 });

@@ -1,10 +1,10 @@
-/** Corner radii. Soft, never sharp — nothing in this app should feel hard. */
+/** Corner radii. Soft and generous — nothing in this app should feel hard. */
 export const radius = {
-  xs: 8,
-  sm: 12,
-  md: 16,
-  lg: 22,
-  xl: 30,
+  xs: 10,
+  sm: 14,
+  md: 18,
+  lg: 24,
+  xl: 32,
   pill: 999,
 } as const;
 

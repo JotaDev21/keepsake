@@ -5,12 +5,14 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { enterRise } from '@/animations';
-import { BackButton, Button, Card, EmptyState, Icon, Text } from '@/components';
-import { useTheme } from '@/design';
+import { BackButton, Button, Card, EmptyState, Icon, ScreenHeader, SunflowerMark, Text } from '@/components';
+import { radius, spacing, useTheme } from '@/design';
 import { countdownLabel } from '@/lib/dates';
 import { formatDate } from '@/lib/format';
+import { useNow } from '@/lib/useNow';
 import { usePersonStore } from '@/stores/usePersonStore';
 import { useLetterStore } from '@/stores/useLetterStore';
+import { useSyncStore } from '@/stores/useSyncStore';
 import type { Letter } from '@/types/models';
 
 export default function CartasScreen() {
@@ -20,25 +22,34 @@ export default function CartasScreen() {
   const person = usePersonStore((s) => s.person);
   const letters = useLetterStore((s) => s.letters);
   const load = useLetterStore((s) => s.load);
+  // Reload when a letter arrives from her side while this screen is open.
+  const lettersVersion = useSyncStore((s) => s.lettersVersion);
 
   useEffect(() => {
     if (person) load(person.id);
-  }, [person, load]);
+  }, [person, load, lettersVersion]);
+
+  const nome = person?.nome ?? 'a outra pessoa';
+  const now = useNow(30_000);
+  const received = letters.filter((l) => l.direcao === 'recebida');
+  const mine = letters.filter((l) => l.direcao === 'minha');
 
   return (
     <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingTop: insets.top + 64, paddingHorizontal: 16, paddingBottom: insets.bottom + 110 }}
+        contentContainerStyle={{
+          paddingTop: insets.top + spacing.huge,
+          paddingHorizontal: spacing.lg,
+          // Clearance for the floating "Escrever" button below.
+          paddingBottom: insets.bottom + spacing.huge + spacing.xxxl,
+        }}
       >
-        <View style={styles.header}>
-          <Text variant="title1" color="text">
-            Cartas & cápsulas
-          </Text>
-          <Text variant="subhead" color="textMuted" style={{ marginTop: 2 }}>
-            Palavras pra ela — pra hoje ou pra um dia.
-          </Text>
-        </View>
+        <ScreenHeader
+          title="Cartas & cápsulas"
+          subtitle="Palavras entre vocês — pra hoje ou pra um dia."
+          style={styles.header}
+        />
 
         {letters.length === 0 ? (
           <EmptyState
@@ -49,19 +60,48 @@ export default function CartasScreen() {
             onAction={() => router.push('/cartas/escrever')}
           />
         ) : (
-          letters.map((l, i) => (
-            <Animated.View key={l.id} entering={enterRise(i)} style={{ marginBottom: 12 }}>
-              <LetterCard
-                letter={l}
-                onPress={() => router.push({ pathname: '/carta/[id]', params: { id: String(l.id) } })}
-              />
-            </Animated.View>
-          ))
+          <>
+            {received.length > 0 ? (
+              <>
+                <Text variant="overline" color="accent" style={styles.kicker}>
+                  De {nome}
+                </Text>
+                {received.map((l, i) => (
+                  <Animated.View key={l.id} entering={enterRise(i)} style={styles.cardGap}>
+                    <LetterCard
+                      letter={l}
+                      now={now}
+                      onPress={() => router.push({ pathname: '/carta/[id]', params: { id: String(l.id) } })}
+                    />
+                  </Animated.View>
+                ))}
+              </>
+            ) : null}
+
+            {mine.length > 0 ? (
+              <>
+                {received.length > 0 ? (
+                  <Text variant="overline" color="textMuted" style={[styles.kicker, { marginTop: spacing.xl }]}>
+                    Suas
+                  </Text>
+                ) : null}
+                {mine.map((l, i) => (
+                  <Animated.View key={l.id} entering={enterRise(received.length + i)} style={styles.cardGap}>
+                    <LetterCard
+                      letter={l}
+                      now={now}
+                      onPress={() => router.push({ pathname: '/carta/[id]', params: { id: String(l.id) } })}
+                    />
+                  </Animated.View>
+                ))}
+              </>
+            ) : null}
+          </>
         )}
       </ScrollView>
 
       {letters.length > 0 ? (
-        <View style={[styles.fabWrap, { bottom: insets.bottom + 20 }]} pointerEvents="box-none">
+        <View style={[styles.fabWrap, { bottom: insets.bottom + spacing.xl }]} pointerEvents="box-none">
           <Button label="Escrever" icon="edit-3" onPress={() => router.push('/cartas/escrever')} />
         </View>
       ) : null}
@@ -71,28 +111,43 @@ export default function CartasScreen() {
   );
 }
 
-function LetterCard({ letter, onPress }: { letter: Letter; onPress: () => void }) {
+function LetterCard({ letter, now, onPress }: { letter: Letter; now: number; onPress: () => void }) {
   const theme = useTheme();
   const isCapsule = letter.abrirEm != null;
-  const locked = isCapsule && letter.abrirEm != null && letter.abrirEm > Date.now() && !letter.aberta;
+  const locked = isCapsule && letter.abrirEm != null && letter.abrirEm > now && !letter.aberta;
+  const received = letter.direcao === 'recebida';
 
-  const status = locked
+  const base = locked
     ? `Abre ${countdownLabel(letter.abrirEm as number, false)}`
     : isCapsule
       ? letter.aberta
         ? 'Cápsula aberta'
         : 'Cápsula pronta'
       : formatDate(new Date(letter.criadoEm));
+  // A quiet read-receipt for what you sent; never noisy.
+  const status = !received && letter.lida ? `${base} · lida 🌻` : base;
 
   return (
-    <Card onPress={onPress} accessibilityLabel={letter.titulo}>
+    <Card
+      onPress={onPress}
+      accessibilityLabel={letter.titulo}
+      // A touch of paper: letters rest one step lighter than the night around them.
+      style={{ backgroundColor: theme.colors.surfaceElevated }}
+    >
       <View style={styles.cardRow}>
-        <View style={[styles.glyph, { backgroundColor: theme.colors.accentSoft }]}>
-          <Icon name={locked ? 'lock' : 'mail'} size={18} color="accent" />
-        </View>
+        {received ? (
+          // Her letters arrive signed with the sunflower.
+          <View style={styles.glyph}>
+            <SunflowerMark size={28} />
+          </View>
+        ) : (
+          <View style={[styles.glyph, { backgroundColor: theme.colors.accentSoft }]}>
+            <Icon name={locked ? 'lock' : 'mail'} size={18} color="accent" />
+          </View>
+        )}
         <View style={{ flex: 1 }}>
           <Text variant="title2" color="text" numberOfLines={1}>
-            {letter.titulo}
+            {locked && received ? 'Uma cápsula selada' : letter.titulo}
           </Text>
           <Text variant="subhead" color="textMuted" style={{ marginTop: 2 }}>
             {status}
@@ -105,8 +160,10 @@ function LetterCard({ letter, onPress }: { letter: Letter; onPress: () => void }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  header: { marginBottom: 24 },
-  cardRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  glyph: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
-  fabWrap: { position: 'absolute', right: 20 },
+  header: { marginBottom: spacing.xxl },
+  kicker: { marginBottom: spacing.md },
+  cardGap: { marginBottom: spacing.md },
+  cardRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  glyph: { width: 42, height: 42, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  fabWrap: { position: 'absolute', right: spacing.lg },
 });

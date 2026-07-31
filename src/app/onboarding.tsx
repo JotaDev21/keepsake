@@ -5,22 +5,25 @@ import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { enterRise } from '@/animations';
-import { AccentPicker, Button, Icon, PressableScale, Text, TextField } from '@/components';
-import { palette, useAccent, useTheme } from '@/design';
+import { AccentPicker, Atmosphere, Button, Icon, PressableScale, ScreenHeader, Text, TextField } from '@/components';
+import { palette, radius, spacing, useAccent, useTheme } from '@/design';
 import { pickImage } from '@/lib/imagePicker';
 import { saveMedia } from '@/lib/media';
 import { usePersonStore } from '@/stores/usePersonStore';
+import { useSyncStore } from '@/stores/useSyncStore';
 
-/** First run — create the dedicated person. Gentle, essentials only. */
+/** First run — name both sides so the same APK feels correct on either phone. */
 export default function Onboarding() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { setAccent } = useAccent();
   const createPerson = usePersonStore((s) => s.createPerson);
+  const saveMyProfile = useSyncStore((s) => s.saveMyProfile);
 
+  const [ownerName, setOwnerName] = useState('');
   const [nome, setNome] = useState('');
   const [apelido, setApelido] = useState('');
-  const [accent, setLocalAccent] = useState<string>(palette.amber);
+  const [accent, setLocalAccent] = useState<string>(palette.sunflower);
   const [coverUri, setCoverUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -35,7 +38,7 @@ export default function Onboarding() {
   };
 
   const begin = async () => {
-    if (!nome.trim() || saving) return;
+    if (!ownerName.trim() || !nome.trim() || saving) return;
     setSaving(true);
     try {
       const coverFile = coverUri ? await saveMedia(coverUri, 'jpg') : null;
@@ -48,6 +51,8 @@ export default function Onboarding() {
         avatarFile: null,
         accent,
       });
+      // This identity stays queued locally until the couple is connected.
+      await saveMyProfile(ownerName.trim());
       // The route guard flips to the tabs automatically.
     } catch (e) {
       console.warn('ev: falha ao criar pessoa', e);
@@ -57,62 +62,77 @@ export default function Onboarding() {
 
   return (
     <View style={[styles.root, { backgroundColor: theme.colors.background, paddingTop: insets.top }]}>
+      <Atmosphere />
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xxxl }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
         <Animated.View entering={enterRise(0)}>
-          <Text variant="overline" color="accent">
-            Bem-vindo
-          </Text>
-          <Text variant="display" color="text" style={{ marginTop: 8 }}>
-            Por quem é{'\n'}este lugar?
-          </Text>
-          <Text variant="serif" color="textSecondary" style={{ marginTop: 12 }}>
-            Um espaço só dela. Comece pelo essencial — o resto dá pra completar depois, com calma.
-          </Text>
+          <ScreenHeader
+            overline="Bem-vindo"
+            title={'Duas pessoas.\nUm lugar entre vocês.'}
+            subtitle="Cada celular guarda a outra pessoa. Primeiro, diga quem está deste lado e quem mora nas lembranças."
+            size="hero"
+          />
         </Animated.View>
 
-        <Animated.View entering={enterRise(1)} style={{ marginTop: 32 }}>
+        <Animated.View entering={enterRise(1)} style={styles.section}>
+          <View style={styles.identityBlock}>
+            <Text variant="overline" color="accent">Este aparelho é de</Text>
+            <TextField
+              label="Seu nome"
+              placeholder="Como a outra pessoa chama você"
+              value={ownerName}
+              onChangeText={setOwnerName}
+              autoCapitalize="words"
+              maxLength={50}
+            />
+          </View>
+
+          <Text variant="overline" color="accent" style={styles.personLabel}>
+            Este espaço guarda
+          </Text>
           <PressableScale
             onPress={chooseCover}
             accessibilityLabel="Escolher uma foto"
-            style={[styles.cover, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+            style={[styles.coverFrame, theme.elevation.low, { backgroundColor: theme.colors.surface }]}
           >
-            {coverUri ? (
-              <Image source={coverUri} style={StyleSheet.absoluteFill} contentFit="cover" />
-            ) : (
-              <View style={styles.coverEmpty}>
-                <Icon name="image" size={22} color="textMuted" />
-                <Text variant="subhead" color="textMuted" style={{ marginTop: 8 }}>
-                  Escolher uma foto
-                </Text>
-              </View>
-            )}
+            <View style={[styles.cover, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+              {coverUri ? (
+                <Image source={coverUri} style={StyleSheet.absoluteFill} contentFit="cover" />
+              ) : (
+                <View style={styles.coverEmpty}>
+                  <Icon name="image" size={22} color="textMuted" />
+                  <Text variant="subhead" color="textMuted" style={styles.coverHint}>
+                    Escolher uma foto
+                  </Text>
+                </View>
+              )}
+            </View>
           </PressableScale>
 
-          <View style={{ marginTop: 24 }}>
-            <TextField label="Nome" placeholder="O nome dela" value={nome} onChangeText={setNome} />
+          <View style={styles.form}>
+            <TextField label="Nome" placeholder="O nome da outra pessoa" value={nome} onChangeText={setNome} />
             <TextField
               label="Apelido (opcional)"
-              placeholder="Como você a chama"
+              placeholder="Como você chama essa pessoa"
               value={apelido}
               onChangeText={setApelido}
             />
-            <Text variant="overline" color="textMuted" style={{ marginBottom: 12 }}>
-              A cor dela
+            <Text variant="overline" color="textMuted" style={styles.accentLabel}>
+              A cor desse vínculo
             </Text>
             <AccentPicker value={accent} onChange={onAccent} />
           </View>
         </Animated.View>
 
-        <Animated.View entering={enterRise(2)} style={{ marginTop: 36 }}>
+        <Animated.View entering={enterRise(2)} style={styles.section}>
           <Button
             label="Começar"
             icon="arrow-right"
             onPress={begin}
-            disabled={!nome.trim()}
+            disabled={!ownerName.trim() || !nome.trim()}
             loading={saving}
             fullWidth
             size="lg"
@@ -125,14 +145,21 @@ export default function Onboarding() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  content: { padding: 24 },
+  content: { paddingHorizontal: spacing.lg, paddingTop: spacing.xl },
+  section: { marginTop: spacing.xxl },
+  identityBlock: { gap: spacing.md, marginBottom: spacing.xxl },
+  personLabel: { marginBottom: spacing.md },
+  coverFrame: { borderRadius: radius.xl },
   cover: {
     height: 180,
-    borderRadius: 22,
+    borderRadius: radius.xl,
     overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },
   coverEmpty: { alignItems: 'center' },
+  coverHint: { marginTop: spacing.sm },
+  form: { marginTop: spacing.xl },
+  accentLabel: { marginBottom: spacing.md },
 });

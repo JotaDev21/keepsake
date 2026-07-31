@@ -5,8 +5,18 @@ import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AudioPlayer, BackButton, Button, Card, Icon, PressableScale, Text, TextField } from '@/components';
-import { radius as radiusTokens, useTheme } from '@/design';
+import {
+  AudioPlayer,
+  BackButton,
+  Button,
+  Card,
+  Icon,
+  PressableScale,
+  ScreenHeader,
+  Text,
+  TextField,
+} from '@/components';
+import { radius, spacing, useTheme } from '@/design';
 import { haptics } from '@/lib/haptics';
 import {
   SPOTIFY_CLIENT_ID,
@@ -17,7 +27,10 @@ import {
   spotifyRedirectUri,
   type SpotifyTrack,
 } from '@/lib/spotify';
+import { startOfDay } from '@/lib/mood';
+import { usePersonStore } from '@/stores/usePersonStore';
 import { useSpotifyStore } from '@/stores/useSpotifyStore';
+import { useSyncStore } from '@/stores/useSyncStore';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -34,6 +47,9 @@ export default function Musica() {
   const disconnect = useSpotifyStore((s) => s.disconnect);
   const setSong = useSpotifyStore((s) => s.setSong);
   const refreshNowPlaying = useSpotifyStore((s) => s.refreshNowPlaying);
+  const partnerSong = useSyncStore((s) => s.partnerSong);
+  const nome = usePersonStore((s) => s.person?.nome ?? 'a outra pessoa');
+  const partnerSongToday = partnerSong != null && partnerSong.dia === startOfDay();
 
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SpotifyTrack[]>([]);
@@ -77,6 +93,8 @@ export default function Musica() {
     setSearching(true);
     try {
       setResults(await searchTracks(query));
+    } catch (e) {
+      console.warn('ev: busca falhou', e);
     } finally {
       setSearching(false);
     }
@@ -94,14 +112,23 @@ export default function Musica() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingTop: insets.top + 64, paddingHorizontal: 16, paddingBottom: insets.bottom + 40 }}
+        contentContainerStyle={{
+          paddingTop: insets.top + spacing.huge,
+          paddingHorizontal: spacing.lg,
+          paddingBottom: insets.bottom + spacing.xxxl,
+        }}
       >
-        <Text variant="title1" color="text" style={{ marginBottom: 8 }}>
-          Música
-        </Text>
-        <Text variant="serif" color="textSecondary" style={{ marginBottom: 24 }}>
-          A trilha de vocês.
-        </Text>
+        <ScreenHeader title="Música" subtitle="A trilha de vocês." style={styles.header} />
+
+        {/* Her pick reaches you even if this device never connected Spotify. */}
+        {partnerSongToday ? (
+          <View style={styles.section}>
+            <Text variant="overline" color="accent" style={styles.label}>
+              A música de {nome} hoje
+            </Text>
+            <TrackCard track={partnerSong.track} />
+          </View>
+        ) : null}
 
         {!configured ? (
           <Card>
@@ -114,7 +141,7 @@ export default function Musica() {
             <Text variant="heading" color="text">
               Conectar Spotify
             </Text>
-            <Text variant="subhead" color="textMuted" style={{ marginTop: 4, marginBottom: 14 }}>
+            <Text variant="subhead" color="textMuted" style={styles.cardHint}>
               Pra escolher a música do dia e ver o que está tocando.
             </Text>
             <Button label="Conectar" icon="music" onPress={() => { haptics.tap(); promptAsync(); }} disabled={!request} />
@@ -127,21 +154,21 @@ export default function Musica() {
             {songOfDay ? (
               <TrackCard track={songOfDay} featured onRemove={() => setSong(null)} />
             ) : (
-              <Text variant="body" color="textMuted" style={{ marginBottom: 8 }}>
+              <Text variant="body" color="textMuted">
                 Busque e escolha uma música abaixo.
               </Text>
             )}
 
             {nowPlaying ? (
               <>
-                <Text variant="overline" color="accent" style={[styles.label, { marginTop: 24 }]}>
+                <Text variant="overline" color="accent" style={[styles.label, styles.sectionStart]}>
                   Tocando agora
                 </Text>
                 <TrackCard track={nowPlaying} />
               </>
             ) : null}
 
-            <Text variant="overline" color="textMuted" style={[styles.label, { marginTop: 24 }]}>
+            <Text variant="overline" color="textMuted" style={[styles.label, styles.sectionStart]}>
               Buscar
             </Text>
             <TextField
@@ -165,7 +192,7 @@ export default function Musica() {
               label="Desconectar Spotify"
               variant="ghost"
               onPress={() => { haptics.tap(); disconnect(); }}
-              style={{ marginTop: 28 }}
+              style={styles.disconnect}
             />
           </>
         )}
@@ -178,19 +205,20 @@ export default function Musica() {
 
 function TrackCard({ track, featured, onRemove }: { track: SpotifyTrack; featured?: boolean; onRemove?: () => void }) {
   const theme = useTheme();
+  const frame = { borderColor: theme.colors.border };
   return (
     <Card featured={featured}>
       <View style={styles.trackHead}>
         {track.albumArt ? (
-          <Image source={track.albumArt} style={styles.art} contentFit="cover" transition={200} />
+          <Image source={track.albumArt} style={[styles.art, frame]} contentFit="cover" transition={200} />
         ) : (
-          <View style={[styles.art, { backgroundColor: theme.colors.surfaceElevated }]} />
+          <View style={[styles.art, frame, { backgroundColor: theme.colors.surfaceElevated }]} />
         )}
-        <View style={{ flex: 1 }}>
+        <View style={styles.trackBody}>
           <Text variant="callout" color="text" numberOfLines={2}>
             {track.name}
           </Text>
-          <Text variant="subhead" color="textMuted" numberOfLines={1} style={{ marginTop: 2 }}>
+          <Text variant="subhead" color="textMuted" numberOfLines={1} style={styles.trackArtist}>
             {track.artist}
           </Text>
         </View>
@@ -201,7 +229,7 @@ function TrackCard({ track, featured, onRemove }: { track: SpotifyTrack; feature
         ) : null}
       </View>
       {track.previewUrl ? (
-        <View style={{ marginTop: 14 }}>
+        <View style={styles.preview}>
           <AudioPlayer uri={track.previewUrl} />
         </View>
       ) : null}
@@ -211,7 +239,7 @@ function TrackCard({ track, featured, onRemove }: { track: SpotifyTrack; feature
         variant="secondary"
         size="sm"
         onPress={() => Linking.openURL(track.url)}
-        style={{ marginTop: 14 }}
+        style={styles.open}
       />
     </Card>
   );
@@ -219,19 +247,20 @@ function TrackCard({ track, featured, onRemove }: { track: SpotifyTrack; feature
 
 function TrackRow({ track }: { track: SpotifyTrack }) {
   const theme = useTheme();
+  const frame = { borderColor: theme.colors.border };
   return (
     <Card>
       <View style={styles.trackHead}>
         {track.albumArt ? (
-          <Image source={track.albumArt} style={styles.artSmall} contentFit="cover" transition={200} />
+          <Image source={track.albumArt} style={[styles.artSmall, frame]} contentFit="cover" transition={200} />
         ) : (
-          <View style={[styles.artSmall, { backgroundColor: theme.colors.surfaceElevated }]} />
+          <View style={[styles.artSmall, frame, { backgroundColor: theme.colors.surfaceElevated }]} />
         )}
-        <View style={{ flex: 1 }}>
+        <View style={styles.trackBody}>
           <Text variant="callout" color="text" numberOfLines={1}>
             {track.name}
           </Text>
-          <Text variant="subhead" color="textMuted" numberOfLines={1} style={{ marginTop: 2 }}>
+          <Text variant="subhead" color="textMuted" numberOfLines={1} style={styles.trackArtist}>
             {track.artist}
           </Text>
         </View>
@@ -243,9 +272,31 @@ function TrackRow({ track }: { track: SpotifyTrack }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  label: { marginBottom: 10 },
-  trackHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  art: { width: 64, height: 64, borderRadius: radiusTokens.md },
-  artSmall: { width: 48, height: 48, borderRadius: radiusTokens.sm },
-  results: { marginTop: 16, gap: 8 },
+  header: { marginBottom: spacing.xxl },
+  section: { marginBottom: spacing.xxl },
+  sectionStart: { marginTop: spacing.xxl },
+  label: { marginBottom: spacing.md },
+  cardHint: { marginTop: spacing.xs, marginBottom: spacing.lg },
+  trackHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  trackBody: { flex: 1 },
+  trackArtist: { marginTop: spacing.xs },
+  // Framed art, never naked: rounded corner + hairline edge.
+  art: {
+    width: 64,
+    height: 64,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  artSmall: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  preview: { marginTop: spacing.lg },
+  open: { marginTop: spacing.lg },
+  results: { marginTop: spacing.lg, gap: spacing.sm },
+  disconnect: { marginTop: spacing.xxl },
 });

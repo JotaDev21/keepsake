@@ -11,14 +11,17 @@ import {
   DatePickerField,
   Icon,
   PressableScale,
+  ScreenHeader,
   Text,
   TextField,
 } from '@/components';
-import { palette, useTheme } from '@/design';
+import { palette, radius, spacing, useTheme } from '@/design';
 import { pickImage } from '@/lib/imagePicker';
 import { deleteMedia, mediaUri, saveMedia } from '@/lib/media';
 import { haptics } from '@/lib/haptics';
+import { syncReminders } from '@/lib/notifications';
 import { usePersonStore } from '@/stores/usePersonStore';
+import { useSyncStore } from '@/stores/useSyncStore';
 import type { FactDraft, ImportantDateDraft } from '@/types/models';
 
 export default function EditarPerfil() {
@@ -35,7 +38,7 @@ export default function EditarPerfil() {
   const [apelido, setApelido] = useState(person?.apelido ?? '');
   const [bio, setBio] = useState(person?.bio ?? '');
   const [como, setComo] = useState(person?.comoSeConheceram ?? '');
-  const [accent, setAccent] = useState(person?.accent ?? palette.amber);
+  const [accent, setAccent] = useState(person?.accent ?? palette.sunflower);
   const [coverTemp, setCoverTemp] = useState<string | null>(null);
   const [avatarTemp, setAvatarTemp] = useState<string | null>(null);
   const [facts, setFacts] = useState<FactDraft[]>(
@@ -94,6 +97,9 @@ export default function EditarPerfil() {
           .map((f) => ({ chave: f.chave.trim(), valor: f.valor.trim() })),
         dates: dates.filter((d) => d.titulo.trim()).map((d) => ({ ...d, titulo: d.titulo.trim() })),
       });
+      await useSyncStore.getState().syncSharedDates();
+      // Dates may have changed — rebuild scheduled reminders in the background.
+      syncReminders(person.id).catch(() => {});
       haptics.success();
       router.back();
     } catch (e) {
@@ -108,25 +114,31 @@ export default function EditarPerfil() {
   return (
     <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
       <ScrollView
-        contentContainerStyle={{ paddingTop: insets.top + 64, paddingBottom: insets.bottom + 48, paddingHorizontal: 16 }}
+        contentContainerStyle={{
+          paddingTop: insets.top + spacing.huge,
+          paddingBottom: insets.bottom + spacing.xxxl,
+          paddingHorizontal: spacing.lg,
+        }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <Text variant="title1" color="text" style={{ marginBottom: 24 }}>
-          Editar perfil
-        </Text>
+        <ScreenHeader title="Editar perfil" mark={false} style={styles.header} />
 
         <PressableScale
           onPress={chooseCover}
           accessibilityLabel="Trocar capa"
-          style={[styles.cover, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+          style={[
+            styles.cover,
+            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+            theme.elevation.low,
+          ]}
         >
           {coverSource ? (
-            <Image source={coverSource} style={StyleSheet.absoluteFill} contentFit="cover" />
+            <Image source={coverSource} style={[StyleSheet.absoluteFill, styles.coverFill]} contentFit="cover" />
           ) : (
             <View style={styles.center}>
               <Icon name="image" size={20} color="textMuted" />
-              <Text variant="subhead" color="textMuted" style={{ marginTop: 6 }}>
+              <Text variant="subhead" color="textMuted" style={styles.placeholderLabel}>
                 Capa
               </Text>
             </View>
@@ -134,9 +146,15 @@ export default function EditarPerfil() {
         </PressableScale>
 
         <PressableScale onPress={chooseAvatar} accessibilityLabel="Trocar foto" style={styles.avatarRow}>
-          <View style={[styles.avatar, { backgroundColor: theme.colors.surface, borderColor: theme.colors.background }]}>
+          <View
+            style={[
+              styles.avatar,
+              { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+              theme.elevation.low,
+            ]}
+          >
             {avatarSource ? (
-              <Image source={avatarSource} style={StyleSheet.absoluteFill} contentFit="cover" />
+              <Image source={avatarSource} style={[StyleSheet.absoluteFill, styles.avatarFill]} contentFit="cover" />
             ) : (
               <Icon name="user" size={24} color="textMuted" />
             )}
@@ -146,10 +164,10 @@ export default function EditarPerfil() {
           </Text>
         </PressableScale>
 
-        <View style={{ marginTop: 20 }}>
+        <View style={styles.fields}>
           <TextField label="Nome" value={nome} onChangeText={setNome} placeholder="Nome" />
           <TextField label="Apelido" value={apelido} onChangeText={setApelido} placeholder="Apelido" />
-          <TextField label="Bio" value={bio} onChangeText={setBio} placeholder="Uma frase sobre ela" multiline />
+        <TextField label="Bio" value={bio} onChangeText={setBio} placeholder="Uma frase sobre essa pessoa" multiline />
           <TextField
             label="Como nos conhecemos"
             value={como}
@@ -157,15 +175,18 @@ export default function EditarPerfil() {
             placeholder="O começo de tudo"
             multiline
           />
-          <Text variant="overline" color="textMuted" style={{ marginBottom: 12 }}>
-            A cor dela
+          <Text variant="overline" color="accent" style={styles.accentLabel}>
+              A cor desse vínculo
           </Text>
           <AccentPicker value={accent} onChange={setAccent} />
         </View>
 
-        <SectionHeader title="Sobre ela" />
+          <SectionHeader title="Sobre essa pessoa" />
         {facts.map((f, i) => (
-          <View key={i} style={[styles.group, { borderColor: theme.colors.border }]}>
+          <View
+            key={i}
+            style={[styles.group, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+          >
             <View style={styles.groupHead}>
               <Text variant="overline" color="textFaint">
                 Fato {i + 1}
@@ -180,7 +201,10 @@ export default function EditarPerfil() {
 
         <SectionHeader title="Datas importantes" />
         {dates.map((d, i) => (
-          <View key={i} style={[styles.group, { borderColor: theme.colors.border }]}>
+          <View
+            key={i}
+            style={[styles.group, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+          >
             <View style={styles.groupHead}>
               <Text variant="overline" color="textFaint">
                 Data {i + 1}
@@ -196,7 +220,7 @@ export default function EditarPerfil() {
               <Switch
                 value={d.recorrente}
                 onValueChange={(v) => setDate(i, { recorrente: v })}
-                trackColor={{ true: theme.colors.accent, false: theme.colors.surfaceElevated }}
+                trackColor={{ true: theme.colors.accent, false: theme.colors.borderStrong }}
                 thumbColor={theme.colors.text}
               />
             </View>
@@ -211,7 +235,7 @@ export default function EditarPerfil() {
           loading={saving}
           fullWidth
           size="lg"
-          style={{ marginTop: 32 }}
+          style={styles.save}
         />
       </ScrollView>
 
@@ -221,10 +245,13 @@ export default function EditarPerfil() {
 }
 
 function SectionHeader({ title }: { title: string }) {
+  const theme = useTheme();
   return (
-    <Text variant="heading" color="text" style={styles.sectionHeader}>
-      {title}
-    </Text>
+    <View style={[styles.sectionHeader, { borderTopColor: theme.colors.border }]}>
+      <Text variant="overline" color="accent">
+        {title}
+      </Text>
+    </View>
   );
 }
 
@@ -238,27 +265,44 @@ function RemoveButton({ onPress }: { onPress: () => void }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  header: { marginBottom: spacing.xxl },
+  // No overflow:hidden — it would clip the warm shadow on iOS; the
+  // absolute-fill image carries the same radius instead.
   cover: {
     height: 170,
-    borderRadius: 22,
-    overflow: 'hidden',
+    borderRadius: radius.xl,
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  coverFill: { borderRadius: radius.xl },
   center: { alignItems: 'center' },
-  avatarRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 14 },
+  placeholderLabel: { marginTop: spacing.xs },
+  avatarRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.lg },
   avatar: {
     width: 64,
     height: 64,
     borderRadius: 32,
-    borderWidth: 2,
-    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sectionHeader: { marginTop: 36, marginBottom: 14 },
-  group: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 18, padding: 16, marginBottom: 14 },
-  groupHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
+  avatarFill: { borderRadius: 32 },
+  fields: { marginTop: spacing.xl },
+  accentLabel: { marginBottom: spacing.md },
+  sectionHeader: {
+    marginTop: spacing.xxl,
+    marginBottom: spacing.lg,
+    paddingTop: spacing.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  group: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  groupHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
+  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.xs },
+  save: { marginTop: spacing.xxl },
 });

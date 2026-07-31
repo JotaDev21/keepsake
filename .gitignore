@@ -48,6 +48,7 @@ example
 *.aab
 *.keystore
 google-services.json
+/supabase/.temp/
 
 # stray local files
 teste.zip

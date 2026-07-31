@@ -1,14 +1,16 @@
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import { fadeIn } from '@/animations';
-import { useTheme } from '@/design';
+import { spacing, useTheme } from '@/design';
 
 import { Button } from './Button';
-import { Icon, type IconName } from './Icon';
+import type { IconName } from './Icon';
+import { SunflowerMark } from './SunflowerMark';
 import { Text } from './Text';
 
 interface EmptyStateProps {
+  /** Kept for compatibility — the sunflower mark is the visual signature now. */
   icon?: IconName;
   /** The emotional line (rendered in serif). */
   title: string;
@@ -20,26 +22,22 @@ interface EmptyStateProps {
 }
 
 /**
- * Empty states with soul: a quiet icon, a serif line, and a delicate invite —
- * never a dry "no items".
+ * Empty states with soul: the quiet sunflower signature, a serif line, and a
+ * delicate invite — never a dry "no items".
  */
-export function EmptyState({ icon, title, message, actionLabel, onAction, style }: EmptyStateProps) {
+export function EmptyState({ title, message, actionLabel, onAction, style }: EmptyStateProps) {
   const theme = useTheme();
 
   return (
     <Animated.View entering={fadeIn(120)} style={[styles.container, style]}>
-      {icon ? (
-        <View style={[styles.iconWrap, { backgroundColor: theme.colors.accentSoft }]}>
-          <Icon name={icon} size={26} color="accent" />
-        </View>
-      ) : null}
-      <Text variant="quote" color="textSecondary" align="center">
+      <SunflowerMark size={34} style={{ marginBottom: theme.spacing.lg }} />
+      <Text variant="title2" align="center">
         {title}
       </Text>
       {message ? (
         <Text
-          variant="body"
-          color="textMuted"
+          variant="serif"
+          color="textSecondary"
           align="center"
           style={{ marginTop: theme.spacing.sm, maxWidth: 300 }}
         >
@@ -49,7 +47,7 @@ export function EmptyState({ icon, title, message, actionLabel, onAction, style 
       {actionLabel && onAction ? (
         <Button
           label={actionLabel}
-          variant="secondary"
+          variant="ghost"
           onPress={onAction}
           style={{ marginTop: theme.spacing.xl }}
         />
@@ -59,13 +57,5 @@ export function EmptyState({ icon, title, message, actionLabel, onAction, style 
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
-  iconWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
+  container: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl },
 });
