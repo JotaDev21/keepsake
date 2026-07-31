@@ -12,6 +12,9 @@ import { saveMedia } from '@/lib/media';
 import { usePersonStore } from '@/stores/usePersonStore';
 import { useSyncStore } from '@/stores/useSyncStore';
 
+const ownerNamePreset = process.env.EXPO_PUBLIC_MEMORY_EV_OWNER_NAME?.trim() ?? '';
+const personNamePreset = process.env.EXPO_PUBLIC_MEMORY_EV_PERSON_NAME?.trim() ?? '';
+
 /** First run — name both sides so the same APK feels correct on either phone. */
 export default function Onboarding() {
   const theme = useTheme();
@@ -20,8 +23,8 @@ export default function Onboarding() {
   const createPerson = usePersonStore((s) => s.createPerson);
   const saveMyProfile = useSyncStore((s) => s.saveMyProfile);
 
-  const [ownerName, setOwnerName] = useState('');
-  const [nome, setNome] = useState('');
+  const [ownerName, setOwnerName] = useState(ownerNamePreset);
+  const [nome, setNome] = useState(personNamePreset);
   const [apelido, setApelido] = useState('');
   const [accent, setLocalAccent] = useState<string>(palette.sunflower);
   const [coverUri, setCoverUri] = useState<string | null>(null);
