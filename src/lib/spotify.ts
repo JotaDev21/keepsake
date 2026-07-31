@@ -12,8 +12,16 @@ export const spotifyDiscovery = {
 
 export const SPOTIFY_SCOPES = ['user-read-currently-playing', 'user-read-recently-played', 'user-top-read'];
 
-/** Add this exact value to the Spotify app's Redirect URIs: ev://spotify */
-export const spotifyRedirectUri = AuthSession.makeRedirectUri({ scheme: 'ev', path: 'spotify' });
+/** Spotify requires this exact HTTPS value in the app's Redirect URIs. */
+export const SPOTIFY_REDIRECT_URI =
+  'https://ziuktulqlfpmaruqabej.supabase.co/functions/v1/spotify-callback';
+
+/** The HTTPS callback immediately hands the OAuth result back to this device. */
+export const SPOTIFY_APP_RETURN_URI = AuthSession.makeRedirectUri({
+  native: 'ev://spotify',
+  scheme: 'ev',
+  path: 'spotify',
+});
 
 const TOKEN_KEY = 'spotify.tokens';
 const SECURE_TOKEN_KEY = 'spotify.tokens';

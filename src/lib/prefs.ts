@@ -5,6 +5,7 @@ import type { ThemeMode } from '@/design';
 /** Fast local preferences (synchronous), backed by expo-sqlite's kv-store. */
 const KEYS = {
   appLock: 'appLock',
+  screenCaptureAllowed: 'screenCaptureAllowed',
   themeMode: 'themeMode',
   checkin: 'notifCheckin',
   checkinHour: 'notifCheckinHour',
@@ -21,6 +22,14 @@ export const prefs = {
   },
   setAppLockEnabled(enabled: boolean): void {
     Storage.setItemSync(KEYS.appLock, enabled ? '1' : '0');
+  },
+
+  /** Screenshots and screen recordings are blocked by default on each device. */
+  isScreenCaptureAllowed(): boolean {
+    return Storage.getItemSync(KEYS.screenCaptureAllowed) === '1';
+  },
+  setScreenCaptureAllowed(allowed: boolean): void {
+    Storage.setItemSync(KEYS.screenCaptureAllowed, allowed ? '1' : '0');
   },
 
   /** The visual climate. Dark-first, so night is the default. */

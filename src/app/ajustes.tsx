@@ -35,6 +35,9 @@ export default function Ajustes() {
   const setSharingPreference = useSyncStore((s) => s.setSharingPreference);
   const pushWater = useSyncStore((s) => s.pushWater);
   const [appLock, setAppLock] = useState(prefs.isAppLockEnabled());
+  const [screenCaptureAllowed, setScreenCaptureAllowed] = useState(
+    prefs.isScreenCaptureAllowed(),
+  );
   const [checkin, setCheckin] = useState(prefs.isCheckinEnabled());
   const [checkinHour, setCheckinHour] = useState(prefs.getCheckinHour());
   const [waterGoal, setWaterGoal] = useState(prefs.getWaterGoalMl());
@@ -97,13 +100,43 @@ export default function Ajustes() {
       if (!authed) return;
       prefs.setAppLockEnabled(true);
       setAppLock(true);
-      // With the lock on, keep the app out of screenshots / switcher snapshots.
-      ScreenCapture.preventScreenCaptureAsync().catch(() => {});
     } else {
       prefs.setAppLockEnabled(false);
       setAppLock(false);
-      ScreenCapture.allowScreenCaptureAsync().catch(() => {});
     }
+  };
+
+  const saveScreenCapturePreference = async (allowed: boolean) => {
+    prefs.setScreenCaptureAllowed(allowed);
+    setScreenCaptureAllowed(allowed);
+    haptics.tap();
+    try {
+      if (allowed) await ScreenCapture.allowScreenCaptureAsync();
+      else await ScreenCapture.preventScreenCaptureAsync();
+    } catch {
+      Alert.alert(
+        'Não consegui mudar agora',
+        'Feche e abra o app para a proteção de tela ser aplicada novamente.',
+      );
+    }
+  };
+
+  const toggleScreenCapture = (allowed: boolean) => {
+    if (!allowed) {
+      void saveScreenCapturePreference(false);
+      return;
+    }
+    Alert.alert(
+      'Permitir capturas?',
+      'Prints e gravações podem guardar fotos, cartas e notas fora da proteção do memory ev.',
+      [
+        { text: 'Manter bloqueado', style: 'cancel' },
+        {
+          text: 'Permitir',
+          onPress: () => void saveScreenCapturePreference(true),
+        },
+      ],
+    );
   };
 
   const toggleSharing = async (key: SharingPreferenceKey, value: boolean) => {
@@ -393,6 +426,33 @@ export default function Ajustes() {
             <Switch
               value={appLock}
               onValueChange={toggleAppLock}
+              trackColor={{ true: theme.colors.accent, false: theme.colors.borderStrong }}
+              thumbColor={theme.colors.text}
+            />
+          </View>
+          <View
+            style={[
+              styles.row,
+              styles.subRow,
+              { borderTopColor: theme.colors.border },
+            ]}
+          >
+            <View style={[styles.glyph, { backgroundColor: theme.colors.accentSoft }]}>
+              <Icon name={screenCaptureAllowed ? 'camera' : 'camera-off'} size={18} color="accent" />
+            </View>
+            <View style={styles.rowBody}>
+              <Text variant="callout" color="text">
+                Permitir prints e gravação
+              </Text>
+              <Text variant="subhead" color="textMuted" style={styles.rowHint}>
+                {screenCaptureAllowed
+                  ? 'Este aparelho pode capturar as telas do app.'
+                  : 'Bloqueados neste aparelho para proteger o conteúdo.'}
+              </Text>
+            </View>
+            <Switch
+              value={screenCaptureAllowed}
+              onValueChange={toggleScreenCapture}
               trackColor={{ true: theme.colors.accent, false: theme.colors.borderStrong }}
               thumbColor={theme.colors.text}
             />

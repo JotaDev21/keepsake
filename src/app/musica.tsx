@@ -20,11 +20,12 @@ import { radius, spacing, useTheme } from '@/design';
 import { haptics } from '@/lib/haptics';
 import {
   SPOTIFY_CLIENT_ID,
+  SPOTIFY_APP_RETURN_URI,
+  SPOTIFY_REDIRECT_URI,
   SPOTIFY_SCOPES,
   saveTokens,
   searchTracks,
   spotifyDiscovery,
-  spotifyRedirectUri,
   type SpotifyTrack,
 } from '@/lib/spotify';
 import { startOfDay } from '@/lib/mood';
@@ -54,9 +55,17 @@ export default function Musica() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SpotifyTrack[]>([]);
   const [searching, setSearching] = useState(false);
+  const [authenticating, setAuthenticating] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
-  const [request, response, promptAsync] = AuthSession.useAuthRequest(
-    { clientId: SPOTIFY_CLIENT_ID, scopes: SPOTIFY_SCOPES, usePKCE: true, redirectUri: spotifyRedirectUri },
+  const [request] = AuthSession.useAuthRequest(
+    {
+      clientId: SPOTIFY_CLIENT_ID,
+      scopes: SPOTIFY_SCOPES,
+      usePKCE: true,
+      responseType: AuthSession.ResponseType.Code,
+      redirectUri: SPOTIFY_REDIRECT_URI,
+    },
     spotifyDiscovery,
   );
 
@@ -68,25 +77,59 @@ export default function Musica() {
     if (connected) refreshNowPlaying();
   }, [connected, refreshNowPlaying]);
 
-  useEffect(() => {
-    if (response?.type === 'success' && request?.codeVerifier) {
-      AuthSession.exchangeCodeAsync(
+  const connectSpotify = async () => {
+    if (!request?.codeVerifier || authenticating) return;
+    haptics.tap();
+    setAuthError(null);
+    setAuthenticating(true);
+    try {
+      const authUrl = await request.makeAuthUrlAsync(spotifyDiscovery);
+      const browserResult = await WebBrowser.openAuthSessionAsync(
+        authUrl,
+        SPOTIFY_APP_RETURN_URI,
+      );
+      if (browserResult.type !== 'success') return;
+
+      const authResult = request.parseReturnUrl(browserResult.url);
+      if (authResult.type === 'error') {
+        setAuthError(
+          authResult.params?.error === 'access_denied'
+            ? 'A conexão foi cancelada no Spotify.'
+            : 'O Spotify recusou a conexão. Confira o Redirect URI e o acesso da conta.',
+        );
+        return;
+      }
+
+      if (authResult.type !== 'success' || !authResult.params.code) {
+        setAuthError('O Spotify não devolveu uma autorização válida. Tente novamente.');
+        return;
+      }
+
+      const tokens = await AuthSession.exchangeCodeAsync(
         {
           clientId: SPOTIFY_CLIENT_ID,
-          code: response.params.code,
-          redirectUri: spotifyRedirectUri,
+          code: authResult.params.code,
+          redirectUri: SPOTIFY_REDIRECT_URI,
           extraParams: { code_verifier: request.codeVerifier },
         },
         spotifyDiscovery,
-      )
-        .then((res) => {
-          saveTokens({ accessToken: res.accessToken, refreshToken: res.refreshToken, expiresIn: res.expiresIn });
-          markConnected();
-          haptics.success();
-        })
-        .catch((e) => console.warn('ev: spotify token falhou', e));
+      );
+      saveTokens({
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresIn: tokens.expiresIn,
+      });
+      markConnected();
+      haptics.success();
+    } catch (e) {
+      console.warn('ev: spotify auth falhou', e);
+      setAuthError(
+        'Não consegui concluir a conexão. Confirme o endereço HTTPS no painel do Spotify e tente novamente.',
+      );
+    } finally {
+      setAuthenticating(false);
     }
-  }, [response, request, markConnected]);
+  };
 
   const onSearch = async () => {
     if (!query.trim()) return;
@@ -144,7 +187,41 @@ export default function Musica() {
             <Text variant="subhead" color="textMuted" style={styles.cardHint}>
               Pra escolher a música do dia e ver o que está tocando.
             </Text>
-            <Button label="Conectar" icon="music" onPress={() => { haptics.tap(); promptAsync(); }} disabled={!request} />
+            <Button
+              label={authenticating ? 'Conectando…' : 'Conectar'}
+              icon="music"
+              onPress={() => void connectSpotify()}
+              loading={authenticating}
+              disabled={!request}
+            />
+            {authError ? (
+              <View
+                style={[
+                  styles.authError,
+                  { borderTopColor: theme.colors.border },
+                ]}
+              >
+                <View style={styles.authErrorTitle}>
+                  <Icon name="alert-circle" size={17} color="accent" />
+                  <Text variant="callout" color="text">
+                    Não conectou
+                  </Text>
+                </View>
+                <Text variant="subhead" color="textMuted">
+                  {authError}
+                </Text>
+                <Text variant="caption" color="textFaint" selectable>
+                  Redirect URI: {SPOTIFY_REDIRECT_URI}
+                </Text>
+                <Button
+                  label="Abrir painel do Spotify"
+                  icon="external-link"
+                  variant="secondary"
+                  size="sm"
+                  onPress={() => Linking.openURL('https://developer.spotify.com/dashboard')}
+                />
+              </View>
+            ) : null}
           </Card>
         ) : (
           <>
@@ -277,6 +354,13 @@ const styles = StyleSheet.create({
   sectionStart: { marginTop: spacing.xxl },
   label: { marginBottom: spacing.md },
   cardHint: { marginTop: spacing.xs, marginBottom: spacing.lg },
+  authError: {
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+    paddingTop: spacing.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  authErrorTitle: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   trackHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   trackBody: { flex: 1 },
   trackArtist: { marginTop: spacing.xs },

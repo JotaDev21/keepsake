@@ -141,12 +141,13 @@ function ThemedNavigator() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // With the lock on, keep the app out of screenshots and the switcher
-  // snapshot (Android FLAG_SECURE). Best-effort — not all devices support it.
+  // Screen capture is a separate privacy choice from biometrics. It stays
+  // blocked by default on each device (Android FLAG_SECURE) until that person
+  // explicitly allows it in Settings.
   useEffect(() => {
-    if (visualAudit) {
+    if (visualAudit || prefs.isScreenCaptureAllowed()) {
       ScreenCapture.allowScreenCaptureAsync().catch(() => {});
-    } else if (prefs.isAppLockEnabled()) {
+    } else {
       ScreenCapture.preventScreenCaptureAsync().catch(() => {});
     }
   }, []);
