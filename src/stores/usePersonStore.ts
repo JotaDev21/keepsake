@@ -28,6 +28,8 @@ interface PersonState {
   createPerson: (core: PersonCore) => Promise<void>;
   /** Save the whole profile (person core + facts + dates) atomically-ish. */
   saveProfile: (input: SaveProfileInput) => Promise<void>;
+  /** Change only the visual accent while preserving every profile detail. */
+  setAccent: (accent: string) => Promise<void>;
 }
 
 export const usePersonStore = create<PersonState>((set, get) => ({
@@ -77,5 +79,26 @@ export const usePersonStore = create<PersonState>((set, get) => ({
       dateRepo.listByPerson(person.id),
     ]);
     set({ person: { ...person, ...core }, facts: newFacts, dates: newDates });
+  },
+
+  setAccent: async (accent) => {
+    const { person, facts, dates } = get();
+    if (!person || person.accent === accent) return;
+    const core: PersonCore = {
+      nome: person.nome,
+      apelido: person.apelido,
+      bio: person.bio,
+      comoSeConheceram: person.comoSeConheceram,
+      coverFile: person.coverFile,
+      avatarFile: person.avatarFile,
+      accent,
+    };
+    await profileRepo.saveAll(
+      person.id,
+      core,
+      facts.map(({ chave, valor }) => ({ chave, valor })),
+      dates.map(({ titulo, data, recorrente, tipo }) => ({ titulo, data, recorrente, tipo })),
+    );
+    set({ person: { ...person, accent } });
   },
 }));

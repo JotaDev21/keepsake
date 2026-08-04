@@ -272,6 +272,20 @@ export const mediaRepo = {
       id,
     );
   },
+
+  async updateDetails(
+    id: number,
+    details: { legenda: string | null; dataMemoria: number | null; local: string | null },
+  ): Promise<void> {
+    const db = await getDb();
+    await db.runAsync(
+      'UPDATE media_item SET legenda = ?, data_memoria = ?, local = ? WHERE id = ?;',
+      details.legenda,
+      details.dataMemoria,
+      details.local,
+      id,
+    );
+  },
 };
 
 /* ------------------------------------------------------------------ mood */
@@ -540,7 +554,11 @@ export const questionRepo = {
     const db = await getDb();
     await db.runAsync(
       `INSERT INTO question_answer (person_id, dia, pergunta, criado_em) VALUES (?, ?, ?, ?)
-       ON CONFLICT(person_id, dia) DO NOTHING;`,
+       ON CONFLICT(person_id, dia) DO UPDATE SET
+         pergunta = CASE
+           WHEN question_answer.resposta IS NULL THEN excluded.pergunta
+           ELSE question_answer.pergunta
+         END;`,
       personId,
       dia,
       pergunta,

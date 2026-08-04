@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
 import { radius, spacing, springs, useTheme, withAlpha } from '@/design';
@@ -7,6 +8,7 @@ import { dayKey } from '@/lib/garden';
 import { haptics } from '@/lib/haptics';
 import { startOfDay } from '@/lib/mood';
 import { prefs } from '@/lib/prefs';
+import { useNow } from '@/lib/useNow';
 import { useAchievementStore } from '@/stores/useAchievementStore';
 import { useSyncStore } from '@/stores/useSyncStore';
 import { GLASS_ML, useWaterStore } from '@/stores/useWaterStore';
@@ -29,6 +31,7 @@ interface HydrationRitualProps {
 export function HydrationRitual({ personId, partnerName }: HydrationRitualProps) {
   const theme = useTheme();
   const waterMl = useWaterStore((state) => state.todayMl);
+  const loadWater = useWaterStore((state) => state.load);
   const addWater = useWaterStore((state) => state.add);
   const paired = useSyncStore((state) => state.paired);
   const partnerJoined = useSyncStore((state) => state.partnerJoined);
@@ -44,11 +47,24 @@ export function HydrationRitual({ personId, partnerName }: HydrationRitualProps)
   const [goalError, setGoalError] = useState<string | null>(null);
   const [burst, setBurst] = useState(0);
   const [nudgeSent, setNudgeSent] = useState(false);
-  const today = startOfDay();
+  const nowMs = useNow();
+  const today = startOfDay(new Date(nowMs));
   const partnerToday = partnerWater?.dia === today ? partnerWater : null;
   const mineDone = waterMl >= goal;
   const partnerDone = partnerToday != null && partnerToday.ml >= partnerToday.goalMl;
   const together = partnerJoined && mineDone && partnerDone;
+
+  useEffect(() => {
+    if (personId) void loadWater(personId);
+  }, [loadWater, personId, today]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const savedGoal = prefs.getWaterGoalMl();
+      setGoal(savedGoal);
+      setCustomGoal(String(savedGoal / 1000).replace('.', ','));
+    }, []),
+  );
 
   useEffect(() => {
     if (!together) return;

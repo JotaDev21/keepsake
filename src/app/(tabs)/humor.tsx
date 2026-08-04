@@ -22,6 +22,7 @@ import { dayAgeLabel } from '@/lib/dates';
 import { computeStats } from '@/lib/garden';
 import { haptics } from '@/lib/haptics';
 import { feelingTags, moodColor, moodScale, startOfDay } from '@/lib/mood';
+import { useNow } from '@/lib/useNow';
 import { usePersonStore } from '@/stores/usePersonStore';
 import { useMoodStore } from '@/stores/useMoodStore';
 import { useSyncStore } from '@/stores/useSyncStore';
@@ -38,6 +39,8 @@ const moodLabel = (key: string | null) => moodScale.find((m) => m.key === key)?.
 export default function HumorScreen() {
   const theme = useTheme();
   const { width } = useWindowDimensions();
+  const nowMs = useNow();
+  const todayDay = startOfDay(new Date(nowMs));
   const person = usePersonStore((s) => s.person);
   const today = useMoodStore((s) => s.today);
   const history = useMoodStore((s) => s.history);
@@ -75,15 +78,21 @@ export default function HumorScreen() {
 
   useEffect(() => {
     if (person) load(person.id);
-  }, [person, load]);
+  }, [person, load, todayDay]);
 
   // Prefill from today's saved entry.
   useEffect(() => {
     if (today) {
-      setHumor(moodScale.findIndex((m) => m.key === today.humor));
+      const savedIndex = moodScale.findIndex((m) => m.key === today.humor);
+      setHumor(savedIndex >= 0 ? savedIndex : null);
       setIntensidade(today.intensidade);
       setNota(today.nota ?? '');
       setTags(today.tags);
+    } else {
+      setHumor(null);
+      setIntensidade(3);
+      setNota('');
+      setTags([]);
     }
   }, [today]);
 
@@ -94,9 +103,9 @@ export default function HumorScreen() {
   }, [history]);
 
   const days = useMemo(() => {
-    const base = startOfDay();
+    const base = todayDay;
     return Array.from({ length: HISTORY_DAYS }, (_, i) => base - (HISTORY_DAYS - 1 - i) * DAY);
-  }, []);
+  }, [todayDay]);
 
   const insights = useMemo(() => {
     // Top mood / average intensity read the recent window ("como TEM sido");
@@ -116,15 +125,15 @@ export default function HumorScreen() {
       }
     });
     // Streak walks real calendar days — a DST shift never breaks a run unfairly.
-    const { streak, total } = computeStats(allDays, startOfDay());
+    const { streak, total } = computeStats(allDays, todayDay);
     return { count: total, topKey: topKey as string | null, avg: history.length ? sumI / history.length : 0, streak };
-  }, [history, allDays]);
+  }, [history, allDays, todayDay]);
 
   const topLabel = moodLabel(insights.topKey);
 
   const nome = person?.nome ?? 'a outra pessoa';
-  const partnerMoodFresh = partnerMood != null && startOfDay() - partnerMood.dia < PARTNER_MOOD_MAX_AGE;
-  const partnerMoodToday = partnerMood != null && partnerMood.dia === startOfDay();
+  const partnerMoodFresh = partnerMood != null && todayDay - partnerMood.dia < PARTNER_MOOD_MAX_AGE;
+  const partnerMoodToday = partnerMood != null && partnerMood.dia === todayDay;
   const selectedMoodColor = humor == null ? theme.colors.accent : moodScale[humor].color;
 
   const inner = width - spacing.lg * 2 - spacing.lg * 2;
@@ -137,7 +146,7 @@ export default function HumorScreen() {
     setSaving(true);
     try {
       await save(person.id, {
-        dia: startOfDay(),
+        dia: todayDay,
         humor: moodScale[humor].key,
         intensidade,
         nota: nota.trim() || null,

@@ -5,7 +5,6 @@ import { startOfDay } from '@/lib/mood';
 import type { Gratitude } from '@/types/models';
 
 import { useGardenStore } from './useGardenStore';
-import { useSyncStore } from './useSyncStore';
 
 interface GratitudeState {
   items: Gratitude[];
@@ -27,12 +26,10 @@ export const useGratitudeStore = create<GratitudeState>((set) => ({
 
   add: async (personId, texto) => {
     const dia = startOfDay();
-    const localId = await gratitudeRepo.create(personId, dia, texto);
+    await gratitudeRepo.create(personId, dia, texto);
     set({ items: await gratitudeRepo.listRecent(personId) });
     // Naming what you're grateful for waters the garden.
     useGardenStore.getState().water(personId).catch(() => {});
-    // Private mirror (backup) — only the author can read it on the server.
-    useSyncStore.getState().pushGratitude({ localId, dia, texto }).catch(() => {});
   },
 
   remove: async (personId, id) => {

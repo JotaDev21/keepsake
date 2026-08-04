@@ -43,6 +43,8 @@ const PENDING_KEY = 'care.pending';
 const PURGE_KEY = 'care.purge';
 
 let realtime: RealtimeChannel | null = null;
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+let retryAttempt = 0;
 
 function localKey(dia = startOfDay()): string {
   return `${LOCAL_PREFIX}${dia}`;
@@ -79,6 +81,7 @@ function queue(item: PendingCare): void {
     (pending) => !(pending.dia === item.dia && pending.kind === item.kind),
   );
   Storage.setItemSync(PENDING_KEY, JSON.stringify([...next, item]));
+  scheduleRetry();
 }
 
 function dequeue(item: PendingCare): void {
@@ -93,6 +96,11 @@ function stopRealtime(): void {
     supabase?.removeChannel(realtime);
     realtime = null;
   }
+  if (retryTimer) {
+    clearTimeout(retryTimer);
+    retryTimer = null;
+  }
+  retryAttempt = 0;
 }
 
 async function pushOne(context: CareContext, item: PendingCare): Promise<boolean> {
@@ -119,36 +127,37 @@ async function pushOne(context: CareContext, item: PendingCare): Promise<boolean
   return !error;
 }
 
-async function refreshRemote(): Promise<void> {
+async function refreshRemote(): Promise<boolean> {
   const state = useCareStore.getState();
   if (!supabase || !state.coupleId || !state.uid) {
     useCareStore.setState({ partner: [] });
-    return;
+    return true;
   }
   const { data, error } = await supabase
     .from('care_checkins')
     .select('author_id,kind,completed_at')
     .eq('couple_id', state.coupleId)
     .eq('dia', startOfDay());
-  if (error || !data) return;
+  if (error || !data) return false;
   const rows = data as CareRow[];
   const partner = rows.flatMap((row): CareSignal[] => {
     if (row.author_id === state.uid || !isCareKind(row.kind)) return [];
     return [{ kind: row.kind, completedAt: Date.parse(row.completed_at) || Date.now() }];
   });
   useCareStore.setState({ partner });
+  return true;
 }
 
-async function flush(): Promise<void> {
+async function flush(): Promise<boolean> {
   const state = useCareStore.getState();
-  if (!supabase || !state.coupleId || !state.uid) return;
+  if (!supabase || !state.coupleId || !state.uid) return false;
 
   if (Storage.getItemSync(PURGE_KEY) === '1') {
     const { error } = await supabase.from('care_checkins').delete().eq('author_id', state.uid);
-    if (error) return;
+    if (error) return false;
     Storage.removeItemSync(PURGE_KEY);
   }
-  if (!state.sharing) return;
+  if (!state.sharing) return true;
 
   for (const item of readPending()) {
     if (await pushOne(state, item)) dequeue(item);
@@ -165,6 +174,27 @@ async function flush(): Promise<void> {
     };
     if (!(await pushOne(state, item))) queue(item);
   }
+  return readPending().length === 0 && Storage.getItemSync(PURGE_KEY) !== '1';
+}
+
+async function syncNow(): Promise<void> {
+  const [remoteOk, flushOk] = await Promise.all([refreshRemote(), flush()]);
+  if (remoteOk && flushOk) {
+    retryAttempt = 0;
+    return;
+  }
+  scheduleRetry();
+}
+
+function scheduleRetry(): void {
+  const state = useCareStore.getState();
+  if (retryTimer || !supabase || !state.coupleId || !state.uid) return;
+  const delay = Math.min(60_000, 2_000 * 2 ** retryAttempt);
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    retryAttempt += 1;
+    void syncNow();
+  }, delay);
 }
 
 export const useCareStore = create<CareState>((set, get) => ({
@@ -200,8 +230,15 @@ export const useCareStore = create<CareState>((set, get) => ({
         { event: '*', schema: 'public', table: 'care_checkins', filter: `couple_id=eq.${coupleId}` },
         () => void refreshRemote(),
       )
-      .subscribe();
-    await Promise.allSettled([refreshRemote(), flush()]);
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          retryAttempt = 0;
+          void syncNow();
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          scheduleRetry();
+        }
+      });
+    await syncNow();
   },
 
   toggle: async (kind) => {
@@ -225,8 +262,7 @@ export const useCareStore = create<CareState>((set, get) => ({
     prefs.setCareSharingEnabled(enabled);
     set({ sharing: enabled });
     if (enabled) {
-      await flush();
-      await refreshRemote();
+      await syncNow();
       return true;
     }
 
@@ -235,6 +271,7 @@ export const useCareStore = create<CareState>((set, get) => ({
     if (!supabase || !uid) return true;
     const { error } = await supabase.from('care_checkins').delete().eq('author_id', uid);
     if (!error) Storage.removeItemSync(PURGE_KEY);
+    else scheduleRetry();
     return true;
   },
 }));

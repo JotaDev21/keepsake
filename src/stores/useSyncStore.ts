@@ -5,7 +5,6 @@ import * as Crypto from 'expo-crypto';
 import { Storage } from 'expo-sqlite/kv-store';
 
 import { letterRepo, mediaRepo, moodRepo, waterRepo } from '@/db/repositories';
-import { generateDailyQuestion } from '@/lib/ai';
 import { haptics } from '@/lib/haptics';
 import {
   removeMemberAvatar,
@@ -16,6 +15,7 @@ import {
 import { deleteMedia, mediaExists, mediaUri } from '@/lib/media';
 import { questionForDay } from '@/lib/questions';
 import {
+  clearSharedMediaCache,
   listSharedMedia,
   removeSharedMedia,
   sharedMediaError,
@@ -112,6 +112,8 @@ function nudgeKind(value: unknown): NudgeKind {
 
 interface SyncState {
   status: SyncStatus;
+  /** Durable local changes still waiting for the server. */
+  pendingChanges: number;
   /** In a couple (may still be waiting for the partner to join). */
   paired: boolean;
   /** The couple has both members — the app is truly "a dois". */
@@ -137,6 +139,8 @@ interface SyncState {
   myResponseToPartnerPulse: PulseResponse | null;
   /** Today's shared question, when the couple has one on the server. */
   sharedQuestion: string | null;
+  /** Day that `sharedQuestion` belongs to. Prevents yesterday leaking past midnight. */
+  sharedQuestionDay: number | null;
   uid: string | null;
   coupleId: string | null;
   partnerId: string | null;
@@ -160,8 +164,6 @@ interface SyncState {
   evictPartner: () => Promise<string | null>;
   pushMood: (draft: MoodEntryDraft) => Promise<void>;
   pushVisit: (dia: number) => Promise<void>;
-  pushGratitude: (g: { localId: number; dia: number; texto: string }) => Promise<void>;
-  pushReason: (r: { localId: number; texto: string }) => Promise<void>;
   pushSong: (dia: number, track: SpotifyTrack | null) => Promise<void>;
   pushWater: (dia: number, ml: number, goalMl?: number) => Promise<void>;
   pushAnswer: (dia: number, resposta: string) => Promise<void>;
@@ -174,8 +176,8 @@ interface SyncState {
   setMediaShared: (localId: number, shared: boolean) => Promise<ShareMediaResult>;
   refreshSharedMedia: () => Promise<void>;
   /**
-   * Make sure today's shared question exists on the server (first device of
-   * the day seeds it — AI first, curated fallback). Returns it, or null when
+   * Make sure today's deterministic shared question exists on the server.
+   * Returns it, or null when
    * unpaired/offline (caller falls back to the local curated question).
    */
   ensureDailyQuestion: () => Promise<string | null>;
@@ -287,6 +289,10 @@ async function fetchActiveInvite(coupleId: string): Promise<string | null> {
 let channel: RealtimeChannel | null = null;
 let channelHealthy = false;
 let flushing = false;
+let refreshInFlight: Promise<void> | null = null;
+let refreshQueued = false;
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+let retryAttempt = 0;
 // Single-flight guard: a foreground event during a slow first init must not
 // spawn a second signInAnonymously (that would mint a duplicate identity).
 let initing: Promise<void> | null = null;
@@ -298,6 +304,31 @@ function stopRealtime() {
   }
   channelHealthy = false;
 }
+
+function clearSyncRetry(): void {
+  if (retryTimer) clearTimeout(retryTimer);
+  retryTimer = null;
+  retryAttempt = 0;
+}
+
+/** Keep offline writes moving even when the app stays open as connectivity returns. */
+function scheduleSyncRetry(): void {
+  useSyncStore.setState({ pendingChanges: outbox.list().length });
+  const state = useSyncStore.getState();
+  if (retryTimer || (!state.coupleId && state.status !== 'error')) return;
+  const delay = Math.min(60_000, 2_000 * 2 ** Math.min(retryAttempt, 5));
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    retryAttempt += 1;
+    const latest = useSyncStore.getState();
+    if (latest.status === 'error' || !latest.uid) void latest.init();
+    else void refreshAll();
+  }, delay);
+}
+
+// Every failed mirror write wakes the bounded retry loop. This also covers
+// failures triggered while the app stays open (without a foreground event).
+outbox.onPending(scheduleSyncRetry);
 
 function startRealtime(coupleId: string) {
   const sb = supabase;
@@ -432,10 +463,17 @@ function startRealtime(coupleId: string) {
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'members', filter: `couple_id=eq.${coupleId}` },
-      () => void refreshMembership(),
+      () => void refreshAll(),
     )
     .subscribe((status) => {
+      const wasHealthy = channelHealthy;
       channelHealthy = status === 'SUBSCRIBED';
+      if (channelHealthy) {
+        retryAttempt = 0;
+        if (!wasHealthy) void refreshAll();
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        scheduleSyncRetry();
+      }
     });
 }
 
@@ -449,7 +487,10 @@ function setLastNudge(at: number, kind: NudgeKind) {
 
 /** Drop every trace of the couple on this device (state, caches, queue). */
 function clearCoupleState(): void {
+  const previousCoupleId = useSyncStore.getState().coupleId;
   stopRealtime();
+  clearSyncRetry();
+  if (previousCoupleId) clearSharedMediaCache(previousCoupleId);
   cache(CACHE.coupleId, null);
   cache(CACHE.inviteCode, null);
   cache(CACHE.partnerId, null);
@@ -482,7 +523,9 @@ function clearCoupleState(): void {
     responseToMyPulse: null,
     myResponseToPartnerPulse: null,
     sharedQuestion: null,
+    sharedQuestionDay: null,
     lastNudgeAt: null,
+    pendingChanges: 0,
   });
 }
 
@@ -540,7 +583,6 @@ async function refreshMembership(): Promise<void> {
   if (joined && !partnerJoined) {
     // She's here. The moment the app becomes "a dois".
     haptics.success();
-    void refreshAll();
   }
 }
 
@@ -706,7 +748,7 @@ async function refreshPartnerWater(): Promise<void> {
     .eq('author_id', partnerId)
     .eq('dia', startOfDay())
     .limit(1);
-  if (error || !data) {
+  if (error?.code === '42703') {
     // Older servers remain readable until the hydration migration lands.
     const legacy = await sb
       .from('water_days')
@@ -724,6 +766,7 @@ async function refreshPartnerWater(): Promise<void> {
     });
     return;
   }
+  if (error || !data) return;
   const row = data[0];
   useSyncStore.setState({
     partnerWater: row
@@ -893,23 +936,45 @@ async function importLetters(viaRealtime: boolean): Promise<void> {
 }
 
 async function refreshAll(): Promise<void> {
-  // Consent must be known before replaying queued mirrors; otherwise a cold
-  // start could discard an allowed offline update using stale local defaults.
-  await refreshSharingPreferences();
-  await Promise.allSettled([
-    refreshMembership(),
-    refreshPartnerMood(),
-    refreshPartnerVisits(),
-    refreshPartnerSong(),
-    refreshPartnerWater(),
-    refreshPartnerAnswer(),
-    refreshPartnerDates(),
-    refreshSharedMediaRemote(),
-    refreshPulses(),
-    fetchUnseenNudges(),
-    importLetters(false),
-    flushOutbox(),
-  ]);
+  if (refreshInFlight) {
+    refreshQueued = true;
+    return refreshInFlight;
+  }
+  const run = (async () => {
+    // Membership must finish first: partner-scoped reads cannot race against
+    // discovering a new/stale partner id on cold start.
+    await refreshMembership();
+    if (!useSyncStore.getState().coupleId) return;
+
+    // Consent must be known before replaying queued mirrors; otherwise a cold
+    // start could discard an allowed offline update using stale local defaults.
+    await refreshSharingPreferences();
+    await Promise.allSettled([
+      refreshPartnerMood(),
+      refreshPartnerVisits(),
+      refreshPartnerSong(),
+      refreshPartnerWater(),
+      refreshPartnerAnswer(),
+      refreshPartnerDates(),
+      refreshSharedMediaRemote(),
+      refreshPulses(),
+      fetchUnseenNudges(),
+      importLetters(false),
+      flushOutbox(),
+    ]);
+  })();
+  refreshInFlight = run.finally(() => {
+    refreshInFlight = null;
+    const pendingChanges = outbox.list().length;
+    useSyncStore.setState({ pendingChanges });
+    if (pendingChanges > 0 || !channelHealthy) scheduleSyncRetry();
+    else clearSyncRetry();
+    if (refreshQueued) {
+      refreshQueued = false;
+      void refreshAll();
+    }
+  });
+  return refreshInFlight;
 }
 
 async function sendPulse(pulse: QuickPulse): Promise<boolean> {
@@ -1031,8 +1096,6 @@ async function flushOutbox(): Promise<void> {
       // Each push removes its key on success and re-queues on failure.
       if (item.kind === 'mood') await s.pushMood(item.payload as MoodEntryDraft);
       else if (item.kind === 'visit') await s.pushVisit((item.payload as { dia: number }).dia);
-      else if (item.kind === 'gratitude') await s.pushGratitude(item.payload as { localId: number; dia: number; texto: string });
-      else if (item.kind === 'reason') await s.pushReason(item.payload as { localId: number; texto: string });
       else if (item.kind === 'song') {
         const p = item.payload as { dia: number; track: SpotifyTrack | null };
         await s.pushSong(p.dia, p.track);
@@ -1081,6 +1144,7 @@ function touchLastSeen(): void {
 
 export const useSyncStore = create<SyncState>((set, get) => ({
   status: isSupabaseConfigured ? 'connecting' : 'unconfigured',
+  pendingChanges: outbox.list().length,
   // Hydrate from cache so an offline cold start still knows the couple.
   paired: cached(CACHE.coupleId) != null,
   partnerJoined: cached(CACHE.partnerJoined) === '1',
@@ -1101,6 +1165,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
   responseToMyPulse: null,
   myResponseToPartnerPulse: null,
   sharedQuestion: null,
+  sharedQuestionDay: null,
   uid: null,
   coupleId: cached(CACHE.coupleId),
   partnerId: cached(CACHE.partnerId),
@@ -1178,6 +1243,8 @@ export const useSyncStore = create<SyncState>((set, get) => ({
               myPulseSeenAt: null,
               responseToMyPulse: null,
               myResponseToPartnerPulse: null,
+              sharedQuestion: null,
+              sharedQuestionDay: null,
             }),
       });
 
@@ -1189,6 +1256,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     } catch (e) {
       console.warn('ev: sync init falhou', e);
       set({ status: 'error' });
+      scheduleSyncRetry();
     }
     })();
     initing = run.finally(() => {
@@ -1558,40 +1626,6 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     else outbox.remove(key);
   },
 
-  pushGratitude: async (g) => {
-    const sb = supabase;
-    const { coupleId, uid } = get();
-    const key = `gratitude:${g.localId}`;
-    if (!sb || !coupleId) return;
-    if (!uid) {
-      outbox.add({ kind: 'gratitude', key, payload: g });
-      return;
-    }
-    const { error } = await sb.from('gratitudes').upsert(
-      { couple_id: coupleId, author_id: uid, local_id: g.localId, dia: g.dia, texto: g.texto },
-      { onConflict: 'author_id,local_id', ignoreDuplicates: true },
-    );
-    if (error) outbox.add({ kind: 'gratitude', key, payload: g });
-    else outbox.remove(key);
-  },
-
-  pushReason: async (r) => {
-    const sb = supabase;
-    const { coupleId, uid } = get();
-    const key = `reason:${r.localId}`;
-    if (!sb || !coupleId) return;
-    if (!uid) {
-      outbox.add({ kind: 'reason', key, payload: r });
-      return;
-    }
-    const { error } = await sb.from('reasons').upsert(
-      { couple_id: coupleId, author_id: uid, local_id: r.localId, texto: r.texto },
-      { onConflict: 'author_id,local_id', ignoreDuplicates: true },
-    );
-    if (error) outbox.add({ kind: 'reason', key, payload: r });
-    else outbox.remove(key);
-  },
-
   pushSong: async (dia, track) => {
     const sb = supabase;
     const { coupleId, uid, sharingPreferences } = get();
@@ -1682,10 +1716,11 @@ export const useSyncStore = create<SyncState>((set, get) => ({
 
   ensureDailyQuestion: async () => {
     const sb = supabase;
-    const { coupleId, uid, sharedQuestion } = get();
+    const { coupleId, uid, sharedQuestion, sharedQuestionDay } = get();
     const dia = startOfDay();
     if (!sb || !coupleId || !uid) return null;
-    if (sharedQuestion) return sharedQuestion;
+    if (sharedQuestion && sharedQuestionDay === dia) return sharedQuestion;
+    if (sharedQuestionDay !== dia) set({ sharedQuestion: null, sharedQuestionDay: dia });
     try {
       // Someone may have seeded it already (her device, or an earlier open).
       const { data } = await sb
@@ -1696,13 +1731,13 @@ export const useSyncStore = create<SyncState>((set, get) => ({
         .limit(1);
       const existing = (data?.[0]?.pergunta as string | undefined) ?? null;
       if (existing) {
-        set({ sharedQuestion: existing });
+        set({ sharedQuestion: existing, sharedQuestionDay: dia });
         return existing;
       }
 
-      // First device of the day seeds it — AI first, curated fallback — so
-      // both sides always end up reading the same question.
-      const pergunta = (await generateDailyQuestion(dia)) ?? questionForDay(dia);
+      // This invariant must also hold when one phone opens offline: both sides
+      // can derive exactly the same prompt without a server round-trip.
+      const pergunta = questionForDay(dia);
       const { error } = await sb
         .from('daily_questions')
         .upsert({ couple_id: coupleId, dia, pergunta }, { onConflict: 'couple_id,dia', ignoreDuplicates: true });
@@ -1718,7 +1753,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
         .eq('dia', dia)
         .limit(1);
       const final = ((after?.[0]?.pergunta as string | undefined) ?? pergunta) || null;
-      if (final) set({ sharedQuestion: final });
+      if (final) set({ sharedQuestion: final, sharedQuestionDay: dia });
       return final;
     } catch (e) {
       console.warn('ev: pergunta do dia falhou', e);

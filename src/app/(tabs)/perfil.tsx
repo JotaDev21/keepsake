@@ -5,13 +5,23 @@ import { useRouter } from 'expo-router';
 import Animated from 'react-native-reanimated';
 
 import { enterRise } from '@/animations';
-import { Button, Chip, EmptyState, Screen, SunflowerMark, Text } from '@/components';
+import { Button, Chip, EmptyState, Icon, Screen, SunflowerMark, Text, type IconName } from '@/components';
 import { radius, spacing, useTheme } from '@/design';
 import { countdownLabel } from '@/lib/dates';
 import { mediaUri } from '@/lib/media';
 import { usePersonStore } from '@/stores/usePersonStore';
 
 const AVATAR = 72;
+
+function iconForFact(key: string): IconName {
+  const normalized = key.toLowerCase();
+  if (normalized.includes('música')) return 'music';
+  if (normalized.includes('comida')) return 'coffee';
+  if (normalized.includes('sonho')) return 'star';
+  if (normalized.includes('lugar')) return 'map-pin';
+  if (normalized.includes('sorr')) return 'sun';
+  return 'heart';
+}
 
 /** Perfil — entardecer: framed cover, close serif name, warm amber sections. */
 export default function PerfilScreen() {
@@ -118,24 +128,44 @@ export default function PerfilScreen() {
           <Text variant="overline" color="accent" style={styles.kicker}>
               Sobre essa pessoa
           </Text>
-          {facts.map((f, i) => (
+          <View style={styles.factGrid}>
+          {facts.map((f) => (
             <View
               key={f.id}
               style={[
-                styles.factRow,
-                i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.colors.border },
+                styles.factCard,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.border,
+                  experimental_backgroundImage: `linear-gradient(145deg, ${theme.colors.surfaceElevated} 0%, ${theme.colors.surface} 75%, ${theme.colors.accentSoft} 190%)`,
+                },
               ]}
             >
+              <View style={[styles.factIcon, { backgroundColor: theme.colors.accentSoft }]}>
+                <Icon name={iconForFact(f.chave)} size={16} color="accent" />
+              </View>
               <Text variant="overline" color="textMuted">
                 {f.chave}
               </Text>
-              <Text variant="title2" color="text" style={styles.factValue}>
+              <Text variant="serif" color="text" style={styles.factValue}>
                 {f.valor}
               </Text>
             </View>
           ))}
+          </View>
         </Animated.View>
-      ) : null}
+      ) : (
+        <Animated.View entering={enterRise(3)} style={[styles.section, { borderTopColor: theme.colors.border }]}>
+          <EmptyState
+            icon="heart"
+            title="Os detalhes mais bonitos ainda podem morar aqui."
+            message="Guarde uma mania, um sonho ou aquilo que sempre faz essa pessoa sorrir."
+            actionLabel="Guardar um detalhe"
+            onAction={() => router.push('/editar-perfil')}
+            style={styles.emptyHint}
+          />
+        </Animated.View>
+      )}
 
       {dates.length > 0 ? (
         <Animated.View entering={enterRise(4)} style={[styles.section, { borderTopColor: theme.colors.border }]}>
@@ -150,11 +180,6 @@ export default function PerfilScreen() {
         </Animated.View>
       ) : null}
 
-      {facts.length === 0 && dates.length === 0 ? (
-        <Animated.View entering={enterRise(2)}>
-            <EmptyState title="Toque em “Editar” para guardar quem essa pessoa é." style={styles.emptyHint} />
-        </Animated.View>
-      ) : null}
     </Screen>
   );
 }
@@ -203,8 +228,17 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   kicker: { marginBottom: spacing.md },
-  factRow: { paddingVertical: spacing.lg },
-  factValue: { marginTop: spacing.xs },
+  factGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  factCard: {
+    width: '48%',
+    minHeight: 148,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    borderCurve: 'continuous',
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  factIcon: { width: 32, height: 32, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.md },
+  factValue: { marginTop: spacing.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   emptyHint: { flex: 0, paddingVertical: spacing.xxl },
 });

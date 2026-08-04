@@ -22,6 +22,8 @@ import { sharedVisitCount } from '@/lib/achievements';
 import { bloomFor, gardenStage, stageProgress } from '@/lib/garden';
 import { haptics } from '@/lib/haptics';
 import { prefs } from '@/lib/prefs';
+import { startOfDay } from '@/lib/mood';
+import { useNow } from '@/lib/useNow';
 import { useAchievementStore } from '@/stores/useAchievementStore';
 import { useCombinedGarden, useGardenStore } from '@/stores/useGardenStore';
 import { usePersonStore } from '@/stores/usePersonStore';
@@ -47,9 +49,10 @@ export default function JardimScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { width } = useWindowDimensions();
+  const nowMs = useNow();
+  const todayDay = startOfDay(new Date(nowMs));
   const person = usePersonStore((s) => s.person);
   const garden = useCombinedGarden();
-  const load = useGardenStore((s) => s.load);
   const visitDays = useGardenStore((s) => s.days);
   const waterGarden = useGardenStore((s) => s.water);
   const loadWater = useWaterStore((s) => s.load);
@@ -61,10 +64,10 @@ export default function JardimScreen() {
 
   useEffect(() => {
     if (person) {
-      void load(person.id);
+      void waterGarden(person.id);
       void loadWater(person.id);
     }
-  }, [person, load, loadWater]);
+  }, [person, waterGarden, loadWater, todayDay]);
 
   const stats = garden.stats;
   const stage = gardenStage(stats.total);

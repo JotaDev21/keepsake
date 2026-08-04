@@ -14,6 +14,7 @@ import { radius, spacing, springs, useTheme, withAlpha } from '@/design';
 import { haptics } from '@/lib/haptics';
 
 import { TAB_BAR_CONTENT_HEIGHT } from './tabBarLayout';
+import { Icon, type IconName } from './Icon';
 import { Text } from './Text';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -93,41 +94,13 @@ function TabItem({ route, label, focused, onPress }: TabItemProps) {
 function TabGlyph({ route, label, focused }: { route: string; label: string; focused: boolean }) {
   const theme = useTheme();
   const color = focused ? theme.colors.accent : theme.colors.textMuted;
-
-  if (route === 'index') {
-    return (
-      <View style={styles.sunGlyph}>
-        {[0, 45, 90, 135].map((angle) => (
-          <View
-            key={angle}
-            style={[styles.sunRay, { backgroundColor: color, transform: [{ rotate: `${angle}deg` }] }]}
-          />
-        ))}
-        <View style={[styles.sunCore, { backgroundColor: color }]} />
-      </View>
-    );
-  }
-
-  if (route === 'jardim') {
-    return (
-      <View style={styles.orbitGlyph}>
-        <View style={[styles.orbitLeft, { borderColor: color }]} />
-        <View style={[styles.orbitRight, { borderColor: color }]} />
-        <View style={[styles.orbitCore, { backgroundColor: color }]} />
-      </View>
-    );
-  }
-
-  if (route === 'cofre') {
-    return (
-      <View style={styles.archiveGlyph}>
-        <View style={[styles.archiveBack, { borderColor: color }]} />
-        <View style={[styles.archiveFront, { borderColor: color }]}>
-          <View style={[styles.archiveSeed, { backgroundColor: color }]} />
-        </View>
-      </View>
-    );
-  }
+  const iconByRoute: Partial<Record<string, IconName>> = {
+    index: 'home',
+    jardim: 'heart',
+    cofre: 'image',
+  };
+  const icon = iconByRoute[route];
+  if (icon) return <Icon name={icon} size={focused ? 21 : 20} color={color} />;
 
   return (
     <View style={[styles.monogramRing, { borderColor: color }]}>
@@ -243,50 +216,6 @@ const styles = StyleSheet.create({
     right: radius.lg,
     height: StyleSheet.hairlineWidth,
   },
-  sunGlyph: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
-  sunRay: { position: 'absolute', width: 22, height: 1.5, borderRadius: radius.pill },
-  sunCore: { width: 8, height: 8, borderRadius: radius.pill },
-  orbitGlyph: { width: 28, height: 22, alignItems: 'center', justifyContent: 'center' },
-  orbitLeft: {
-    position: 'absolute',
-    left: 2,
-    width: 16,
-    height: 16,
-    borderRadius: radius.pill,
-    borderWidth: 1.5,
-  },
-  orbitRight: {
-    position: 'absolute',
-    right: 2,
-    width: 16,
-    height: 16,
-    borderRadius: radius.pill,
-    borderWidth: 1.5,
-  },
-  orbitCore: { width: 4, height: 4, borderRadius: radius.pill },
-  archiveGlyph: { width: 28, height: 24 },
-  archiveBack: {
-    position: 'absolute',
-    top: 2,
-    left: 2,
-    width: 20,
-    height: 17,
-    borderRadius: radius.xs,
-    borderWidth: 1.4,
-    opacity: 0.54,
-  },
-  archiveFront: {
-    position: 'absolute',
-    right: 1,
-    bottom: 1,
-    width: 21,
-    height: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.xs,
-    borderWidth: 1.4,
-  },
-  archiveSeed: { width: 4, height: 4, borderRadius: radius.pill },
   monogramRing: {
     width: 25,
     height: 25,

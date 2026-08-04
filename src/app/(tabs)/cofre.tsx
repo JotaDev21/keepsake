@@ -31,7 +31,7 @@ import {
 } from '@/components';
 import { durations, radius as radiusTokens, spacing, useTheme } from '@/design';
 import { haptics } from '@/lib/haptics';
-import { pickMedia, takePhoto } from '@/lib/imagePicker';
+import { pickMediaMany, takePhoto } from '@/lib/imagePicker';
 import { mediaUri } from '@/lib/media';
 import { usePersonStore } from '@/stores/usePersonStore';
 import { useMediaStore } from '@/stores/useMediaStore';
@@ -44,8 +44,8 @@ const FILTERS: { label: string; type: MediaType | null }[] = [
   { label: 'Vídeos', type: 'video' },
   { label: 'Áudios', type: 'audio' },
 ];
-const COLS = 2;
-const GAP = 10;
+const COLS = 3;
+const GAP = 5;
 
 const keyExtractor = (item: MediaItem) => String(item.id);
 
@@ -100,12 +100,46 @@ export default function CofreScreen() {
     }
   };
 
-  const importGallery = () =>
+  const importFromGallery = (shareWithPartner: boolean) =>
     runImport(async () => {
       if (!person) return;
-      const picked = await pickMedia();
-      if (picked) await add(person.id, { tipo: picked.kind, sourceUri: picked.uri });
-    });
+      const picked = await pickMediaMany();
+      if (picked.length === 0) return;
+      let saved = 0;
+      let shared = 0;
+      for (const [index, item] of picked.entries()) {
+        setImportLabel(
+          `${shareWithPartner ? 'Enviando' : 'Guardando'} ${index + 1} de ${picked.length}…`,
+        );
+        try {
+          const id = await add(person.id, {
+            tipo: item.kind,
+            sourceUri: item.uri,
+            dataMemoria: Date.now(),
+          });
+          saved += 1;
+          if (shareWithPartner) {
+            const result = await setMediaShared(id, true);
+            if (result.ok) shared += 1;
+          }
+        } catch {
+          // Continue with the rest of the selection; report the partial result.
+        }
+      }
+      if (saved !== picked.length || (shareWithPartner && shared !== picked.length)) {
+        Alert.alert(
+          shareWithPartner ? 'Envio concluído em parte' : 'Algumas lembranças ficaram de fora',
+          shareWithPartner
+            ? `${saved} foram guardadas e ${shared} seguiram para o espaço de vocês. O restante continua seguro neste aparelho.`
+            : `${saved} de ${picked.length} foram guardadas. Você pode tentar as outras novamente.`,
+        );
+      } else {
+        haptics.success();
+      }
+    }, shareWithPartner ? 'Preparando o envio…' : 'Abrindo a galeria…');
+
+  const importGallery = () => importFromGallery(false);
+  const shareGalleryNow = () => importFromGallery(true);
 
   const importCamera = () =>
     runImport(async () => {
@@ -239,9 +273,12 @@ export default function CofreScreen() {
               ) : null}
               {media.length > 0 ? (
                 <>
-                  <View style={styles.viewSwitch}>
-                    <Chip label="Galeria" icon="image" selected onPress={() => undefined} />
-                    <Chip label="Linha do tempo" icon="clock" onPress={() => router.push('/linha-do-tempo')} />
+                  <View style={styles.galleryHeading}>
+                    <View style={styles.galleryHeadingCopy}>
+                      <Text variant="overline" color="accent">Seu acervo</Text>
+                      <Text variant="title2" color="text" style={styles.galleryTitle}>Galeria</Text>
+                    </View>
+                    <Chip label="Ver no tempo" icon="clock" onPress={() => router.push('/linha-do-tempo')} />
                   </View>
                   <View style={styles.filters}>
                     {FILTERS.map((f, i) => (
@@ -302,6 +339,7 @@ export default function CofreScreen() {
         visible={sheetOpen}
         onClose={() => setSheetOpen(false)}
         onGallery={importGallery}
+        onSharedGallery={partnerJoined ? shareGalleryNow : undefined}
         onCamera={importCamera}
         onSharedCamera={partnerJoined ? shareCameraNow : undefined}
         onAudio={recordAudio}
@@ -417,6 +455,7 @@ function AddSheet({
   visible,
   onClose,
   onGallery,
+  onSharedGallery,
   onCamera,
   onSharedCamera,
   onAudio,
@@ -425,6 +464,7 @@ function AddSheet({
   visible: boolean;
   onClose: () => void;
   onGallery: () => void;
+  onSharedGallery?: () => void;
   onCamera: () => void;
   onSharedCamera?: () => void;
   onAudio: () => void;
@@ -442,12 +482,15 @@ function AddSheet({
           {onSharedCamera ? (
             <View style={[styles.nowOption, { backgroundColor: theme.colors.accentSoft, borderColor: theme.colors.accentEdge }]}>
               <SheetOption icon="send" label="Foto de agora — enviar aos dois" onPress={onSharedCamera} />
+              {onSharedGallery ? (
+                <SheetOption icon="image" label="Escolher e enviar aos dois" onPress={onSharedGallery} />
+              ) : null}
               <Text variant="caption" color="textMuted" style={styles.nowHint}>
                 Fica no seu cofre e aparece no outro aparelho assim que o envio terminar.
               </Text>
             </View>
           ) : null}
-          <SheetOption icon="image" label="Foto ou vídeo" onPress={onGallery} />
+          <SheetOption icon="image" label="Escolher fotos e vídeos" onPress={onGallery} />
           <SheetOption icon="camera" label="Tirar foto" onPress={onCamera} />
           <SheetOption icon="mic" label="Gravar áudio" onPress={onAudio} />
         </GlassSurface>
@@ -474,7 +517,15 @@ const styles = StyleSheet.create({
   list: { flex: 1 },
   header: { marginTop: spacing.sm, marginBottom: spacing.xl },
   filters: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
-  viewSwitch: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
+  galleryHeading: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  galleryHeadingCopy: { flex: 1 },
+  galleryTitle: { marginTop: spacing.xs },
   row: { gap: GAP },
   rowGap: { height: GAP },
   tileEdge: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderWidth: StyleSheet.hairlineWidth },

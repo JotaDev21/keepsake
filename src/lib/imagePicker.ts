@@ -28,6 +28,22 @@ export interface PickedMedia {
   kind: 'foto' | 'video';
 }
 
+/** Pick several memories in one native gallery pass. Kept deliberately capped. */
+export async function pickMediaMany(): Promise<PickedMedia[]> {
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images', 'videos'],
+    quality: 0.88,
+    allowsMultipleSelection: true,
+    selectionLimit: 30,
+    orderedSelection: true,
+  });
+  if (result.canceled) return [];
+  return result.assets.map((asset) => ({
+    uri: asset.uri,
+    kind: asset.type === 'video' ? 'video' : 'foto',
+  }));
+}
+
 /** Pick a photo or video from the library (for the Cofre). */
 export async function pickMedia(): Promise<PickedMedia | null> {
   const result = await ImagePicker.launchImageLibraryAsync({

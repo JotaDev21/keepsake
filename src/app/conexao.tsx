@@ -47,6 +47,7 @@ export default function Conexao() {
   const person = usePersonStore((s) => s.person);
   const status = useSyncStore((s) => s.status);
   const paired = useSyncStore((s) => s.paired);
+  const pendingChanges = useSyncStore((s) => s.pendingChanges);
   const partnerJoined = useSyncStore((s) => s.partnerJoined);
   const inviteCode = useSyncStore((s) => s.inviteCode);
   const partnerMood = useSyncStore((s) => s.partnerMood);
@@ -57,6 +58,7 @@ export default function Conexao() {
   const unpair = useSyncStore((s) => s.unpair);
   const evictPartner = useSyncStore((s) => s.evictPartner);
   const init = useSyncStore((s) => s.init);
+  const onForeground = useSyncStore((s) => s.onForeground);
   const sendNudge = useSyncStore((s) => s.sendNudge);
 
   const [code, setCode] = useState('');
@@ -207,8 +209,20 @@ export default function Conexao() {
                 </Text>
               </View>
               <Text variant="subhead" color="textMuted" style={styles.codeHint}>
-                Dois aparelhos conectados. Não existe convite reutilizável enquanto o vínculo estiver completo.
+                {pendingChanges > 0
+                  ? `${pendingChanges} ${pendingChanges === 1 ? 'mudança espera' : 'mudanças esperam'} a conexão voltar. Nada foi descartado.`
+                  : 'Tudo que vocês escolheram compartilhar chegou ao espaço dos dois.'}
               </Text>
+              {pendingChanges > 0 ? (
+                <Button
+                  label="Sincronizar agora"
+                  icon="refresh-cw"
+                  variant="secondary"
+                  size="sm"
+                  onPress={onForeground}
+                  style={styles.cardAction}
+                />
+              ) : null}
             </Card>
 
             <Card style={styles.sibling}>

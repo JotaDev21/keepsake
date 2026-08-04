@@ -20,6 +20,10 @@ interface MediaState {
   add: (personId: number, input: AddInput) => Promise<number>;
   saveSharedCopy: (personId: number, item: SharedMediaItem) => Promise<number>;
   remove: (id: number) => Promise<void>;
+  updateDetails: (
+    id: number,
+    details: { legenda: string | null; dataMemoria: number | null; local: string | null },
+  ) => Promise<void>;
   updateSharing: (id: number, shared: boolean, remoteId: string | null) => void;
 }
 
@@ -100,6 +104,13 @@ export const useMediaStore = create<MediaState>((set, get) => ({
         console.warn('memory ev: limpeza de mídia pendente', error);
       }
     }
+  },
+
+  updateDetails: async (id, details) => {
+    await mediaRepo.updateDetails(id, details);
+    set({
+      items: get().items.map((item) => (item.id === id ? { ...item, ...details } : item)),
+    });
   },
 
   updateSharing: (id, shared, remoteId) => {

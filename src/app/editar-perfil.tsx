@@ -8,6 +8,7 @@ import {
   AccentPicker,
   BackButton,
   Button,
+  Chip,
   DatePickerField,
   Icon,
   PressableScale,
@@ -19,10 +20,31 @@ import { palette, radius, spacing, useTheme } from '@/design';
 import { pickImage } from '@/lib/imagePicker';
 import { deleteMedia, mediaUri, saveMedia } from '@/lib/media';
 import { haptics } from '@/lib/haptics';
+import { token } from '@/lib/ids';
 import { syncReminders } from '@/lib/notifications';
 import { usePersonStore } from '@/stores/usePersonStore';
 import { useSyncStore } from '@/stores/useSyncStore';
-import type { FactDraft, ImportantDateDraft } from '@/types/models';
+import type { FactDraft, ImportantDateDraft, ImportantDateType } from '@/types/models';
+
+type FactForm = FactDraft & { formKey: string };
+type DateForm = ImportantDateDraft & { formKey: string };
+
+const FACT_PROMPTS = [
+  'O que faz sorrir',
+  'Jeito de demonstrar amor',
+  'Comida que conforta',
+  'Música que tem a cara dela',
+  'Um sonho importante',
+  'Uma mania adorável',
+  'Quando precisa de carinho',
+  'Lugar favorito',
+] as const;
+
+const DATE_TYPES: { value: ImportantDateType; label: string; suggestedTitle: string }[] = [
+  { value: 'aniversario', label: 'Aniversário', suggestedTitle: 'Aniversário' },
+  { value: 'primeiro_encontro', label: 'Primeiro encontro', suggestedTitle: 'Nosso primeiro encontro' },
+  { value: 'outro', label: 'Outra data', suggestedTitle: '' },
+];
 
 export default function EditarPerfil() {
   const theme = useTheme();
@@ -41,11 +63,11 @@ export default function EditarPerfil() {
   const [accent, setAccent] = useState(person?.accent ?? palette.sunflower);
   const [coverTemp, setCoverTemp] = useState<string | null>(null);
   const [avatarTemp, setAvatarTemp] = useState<string | null>(null);
-  const [facts, setFacts] = useState<FactDraft[]>(
-    storedFacts.map((f) => ({ chave: f.chave, valor: f.valor })),
+  const [facts, setFacts] = useState<FactForm[]>(
+    storedFacts.map((f) => ({ formKey: `fact-${f.id}`, chave: f.chave, valor: f.valor })),
   );
-  const [dates, setDates] = useState<ImportantDateDraft[]>(
-    storedDates.map((d) => ({ titulo: d.titulo, data: d.data, recorrente: d.recorrente, tipo: d.tipo })),
+  const [dates, setDates] = useState<DateForm[]>(
+    storedDates.map((d) => ({ formKey: `date-${d.id}`, titulo: d.titulo, data: d.data, recorrente: d.recorrente, tipo: d.tipo })),
   );
   const [saving, setSaving] = useState(false);
 
@@ -65,13 +87,31 @@ export default function EditarPerfil() {
 
   const setFact = (i: number, patch: Partial<FactDraft>) =>
     setFacts((prev) => prev.map((f, idx) => (idx === i ? { ...f, ...patch } : f)));
-  const addFact = () => setFacts((prev) => [...prev, { chave: '', valor: '' }]);
+  const addFact = () => setFacts((prev) => [...prev, { formKey: token(), chave: '', valor: '' }]);
+  const addSuggestedFact = (chave: string) => {
+    if (facts.some((fact) => fact.chave.trim().toLowerCase() === chave.toLowerCase())) return;
+    haptics.selection();
+    setFacts((prev) => [...prev, { formKey: token(), chave, valor: '' }]);
+  };
   const removeFact = (i: number) => setFacts((prev) => prev.filter((_, idx) => idx !== i));
 
   const setDate = (i: number, patch: Partial<ImportantDateDraft>) =>
     setDates((prev) => prev.map((d, idx) => (idx === i ? { ...d, ...patch } : d)));
+  const setDateType = (i: number, type: ImportantDateType) => {
+    const preset = DATE_TYPES.find((item) => item.value === type);
+    setDates((prev) => prev.map((date, index) => (
+      index === i
+        ? {
+            ...date,
+            tipo: type,
+            recorrente: type === 'outro' ? date.recorrente : true,
+            titulo: date.titulo.trim() || preset?.suggestedTitle || '',
+          }
+        : date
+    )));
+  };
   const addDate = () =>
-    setDates((prev) => [...prev, { titulo: '', data: Date.now(), recorrente: true, tipo: 'outro' }]);
+    setDates((prev) => [...prev, { formKey: token(), titulo: '', data: Date.now(), recorrente: true, tipo: 'outro' }]);
   const removeDate = (i: number) => setDates((prev) => prev.filter((_, idx) => idx !== i));
 
   const onSave = async () => {
@@ -93,9 +133,19 @@ export default function EditarPerfil() {
           accent,
         },
         facts: facts
-          .filter((f) => f.chave.trim() || f.valor.trim())
-          .map((f) => ({ chave: f.chave.trim(), valor: f.valor.trim() })),
-        dates: dates.filter((d) => d.titulo.trim()).map((d) => ({ ...d, titulo: d.titulo.trim() })),
+          .filter((f) => f.valor.trim())
+          .map((f) => ({
+            chave: f.chave.trim() || 'Um detalhe que guardo',
+            valor: f.valor.trim(),
+          })),
+        dates: dates
+          .filter((d) => d.titulo.trim())
+          .map((d) => ({
+            titulo: d.titulo.trim(),
+            data: d.data,
+            recorrente: d.recorrente,
+            tipo: d.tipo,
+          })),
       });
       await useSyncStore.getState().syncSharedDates();
       // Dates may have changed — rebuild scheduled reminders in the background.
@@ -181,28 +231,61 @@ export default function EditarPerfil() {
           <AccentPicker value={accent} onChange={setAccent} />
         </View>
 
-          <SectionHeader title="Sobre essa pessoa" />
+        <SectionHeader title="Pequenas coisas que fazem essa pessoa ser ela" />
+        <Text variant="subhead" color="textMuted" style={styles.sectionIntro}>
+          Escolha uma ideia ou escreva do seu jeito. É um retrato feito de detalhes, não um formulário.
+        </Text>
+        <View style={styles.promptCloud}>
+          {FACT_PROMPTS.map((prompt) => (
+            <Chip
+              key={prompt}
+              label={prompt}
+              icon="heart"
+              selected={facts.some((fact) => fact.chave.trim().toLowerCase() === prompt.toLowerCase())}
+              onPress={() => addSuggestedFact(prompt)}
+            />
+          ))}
+        </View>
         {facts.map((f, i) => (
           <View
-            key={i}
-            style={[styles.group, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+            key={f.formKey}
+            style={[
+              styles.group,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: f.valor.trim() ? theme.colors.accentEdge : theme.colors.border,
+                experimental_backgroundImage: `linear-gradient(145deg, ${theme.colors.surfaceElevated} 0%, ${theme.colors.surface} 72%, ${theme.colors.accentSoft} 180%)`,
+              },
+            ]}
           >
             <View style={styles.groupHead}>
-              <Text variant="overline" color="textFaint">
-                Fato {i + 1}
-              </Text>
+              <View style={[styles.factGlyph, { backgroundColor: theme.colors.accentSoft }]}>
+                <Icon name="heart" size={15} color="accent" />
+              </View>
+              <Text variant="overline" color="accent" style={styles.factNumber}>DETALHE {i + 1}</Text>
               <RemoveButton onPress={() => removeFact(i)} />
             </View>
-            <TextField value={f.chave} onChangeText={(t) => setFact(i, { chave: t })} placeholder="Título (ex.: Comida favorita)" />
-            <TextField value={f.valor} onChangeText={(t) => setFact(i, { valor: t })} placeholder="Valor" />
+            <TextField
+              label="Sobre o que é"
+              value={f.chave}
+              onChangeText={(t) => setFact(i, { chave: t })}
+              placeholder="Ex.: O que faz sorrir"
+            />
+            <TextField
+              label="O que você quer lembrar"
+              value={f.valor}
+              onChangeText={(t) => setFact(i, { valor: t })}
+              placeholder="Conte do seu jeito…"
+              multiline
+            />
           </View>
         ))}
-        <Button label="Adicionar fato" icon="plus" variant="ghost" size="sm" onPress={addFact} />
+        <Button label="Adicionar outra coisa só de vocês" icon="plus" variant="secondary" size="sm" onPress={addFact} />
 
         <SectionHeader title="Datas importantes" />
         {dates.map((d, i) => (
           <View
-            key={i}
+            key={d.formKey}
             style={[styles.group, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
           >
             <View style={styles.groupHead}>
@@ -210,6 +293,17 @@ export default function EditarPerfil() {
                 Data {i + 1}
               </Text>
               <RemoveButton onPress={() => removeDate(i)} />
+            </View>
+            <Text variant="caption" color="textMuted" style={styles.dateTypeLabel}>Que momento é esse?</Text>
+            <View style={styles.dateTypes}>
+              {DATE_TYPES.map((type) => (
+                <Chip
+                  key={type.value}
+                  label={type.label}
+                  selected={d.tipo === type.value}
+                  onPress={() => setDateType(i, type.value)}
+                />
+              ))}
             </View>
             <TextField value={d.titulo} onChangeText={(t) => setDate(i, { titulo: t })} placeholder="Título (ex.: Aniversário)" />
             <DatePickerField label="Data" value={new Date(d.data)} onChange={(date) => setDate(i, { data: date.getTime() })} />
@@ -302,7 +396,13 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     marginBottom: spacing.md,
   },
-  groupHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
+  sectionIntro: { marginTop: -spacing.md, marginBottom: spacing.md, maxWidth: 340 },
+  promptCloud: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
+  groupHead: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md },
+  factGlyph: { width: 30, height: 30, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  factNumber: { flex: 1, marginLeft: spacing.sm },
+  dateTypeLabel: { marginBottom: spacing.sm },
+  dateTypes: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
   switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.xs },
   save: { marginTop: spacing.xxl },
 });

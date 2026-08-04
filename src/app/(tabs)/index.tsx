@@ -46,6 +46,7 @@ export default function HojeScreen() {
   const { width } = useWindowDimensions();
   const nowMs = useNow();
   const now = new Date(nowMs);
+  const todayDay = startOfDay(now);
 
   const person = usePersonStore((state) => state.person);
   const dates = usePersonStore((state) => state.dates);
@@ -75,13 +76,16 @@ export default function HojeScreen() {
     if (!person) return;
     void loadMedia(person.id);
     void loadMood(person.id);
-  }, [loadMedia, loadMood, person]);
+  }, [loadMedia, loadMood, person, todayDay]);
 
   const memory = memoryOfDay(media);
   const memoryHeight = Math.min(460, (width - spacing.lg * 2) * 1.05);
   const nome = person?.nome ?? 'a outra pessoa';
   const partnerName = partnerProfile?.displayName ?? nome;
-  const moodIndex = moodToday ? moodScale.findIndex((mood) => mood.key === moodToday.humor) : null;
+  const savedMoodIndex = moodToday
+    ? moodScale.findIndex((mood) => mood.key === moodToday.humor)
+    : -1;
+  const moodIndex = savedMoodIndex >= 0 ? savedMoodIndex : null;
 
   const upcoming = useMemo(
     () =>
@@ -95,23 +99,23 @@ export default function HojeScreen() {
   );
 
   const togetherDays = useMemo(() => {
-    const firstDate = dates
+    const firstDate = [...dates, ...partnerDates]
       .filter((date) => date.tipo === 'primeiro_encontro')
       .map((date) => date.data)
       .sort((left, right) => left - right)[0];
     if (!firstDate) return null;
     return Math.max(0, Math.floor((startOfDay() - startOfDay(new Date(firstDate))) / DAY));
-  }, [dates]);
+  }, [dates, partnerDates]);
 
   const nudgeFresh = lastNudgeAt != null && nowMs - lastNudgeAt < NUDGE_TTL;
   const partnerMoodFresh =
-    partnerMood != null && startOfDay() - partnerMood.dia < PARTNER_MOOD_MAX_AGE;
-  const partnerMoodToday = partnerMood?.dia === startOfDay();
+    partnerMood != null && todayDay - partnerMood.dia < PARTNER_MOOD_MAX_AGE;
+  const partnerMoodToday = partnerMood?.dia === todayDay;
 
   const pickMood = (index: number) => {
     if (!person) return;
     void saveMood(person.id, {
-      dia: startOfDay(),
+      dia: todayDay,
       humor: moodScale[index].key,
       intensidade: moodToday?.intensidade ?? 3,
       nota: moodToday?.nota ?? null,

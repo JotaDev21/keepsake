@@ -7,13 +7,25 @@ import { useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { enterRise, fadeIn } from '@/animations';
-import { AudioPlayer, BackButton, Button, Card, Chip, EmptyState, Icon, Text } from '@/components';
+import {
+  AudioPlayer,
+  BackButton,
+  Button,
+  Card,
+  Chip,
+  DatePickerField,
+  EmptyState,
+  Icon,
+  Text,
+  TextField,
+} from '@/components';
 import { mediaRepo } from '@/db/repositories';
 import { durations, spacing, useTheme } from '@/design';
 import { formatDate } from '@/lib/format';
 import { haptics } from '@/lib/haptics';
 import { mediaUri } from '@/lib/media';
 import { useSyncStore } from '@/stores/useSyncStore';
+import { useMediaStore } from '@/stores/useMediaStore';
 import type { MediaItem } from '@/types/models';
 
 /** Detalhe de memória — immersive view of a single photo / video / audio. */
@@ -23,8 +35,14 @@ export default function MemoriaDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [item, setItem] = useState<MediaItem | null | undefined>(undefined);
   const [sharing, setSharing] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [savingDetails, setSavingDetails] = useState(false);
+  const [caption, setCaption] = useState('');
+  const [place, setPlace] = useState('');
+  const [memoryDate, setMemoryDate] = useState(() => new Date());
   const partnerJoined = useSyncStore((state) => state.partnerJoined);
   const setMediaShared = useSyncStore((state) => state.setMediaShared);
+  const updateDetails = useMediaStore((state) => state.updateDetails);
 
   useEffect(() => {
     const n = Number(id);
@@ -64,6 +82,36 @@ export default function MemoriaDetail() {
         { text: 'Deixar privada', style: 'destructive', onPress: () => void changeSharing(false) },
       ],
     );
+  };
+
+  const openEditor = () => {
+    if (!item) return;
+    setCaption(item.legenda ?? '');
+    setPlace(item.local ?? '');
+    setMemoryDate(new Date(item.dataMemoria ?? item.criadoEm));
+    setEditing(true);
+  };
+
+  const saveDetails = async () => {
+    if (!item || savingDetails) return;
+    setSavingDetails(true);
+    const details = {
+      legenda: caption.trim() || null,
+      local: place.trim() || null,
+      dataMemoria: memoryDate.getTime(),
+    };
+    try {
+      await updateDetails(item.id, details);
+      const refreshed = { ...item, ...details };
+      setItem(refreshed);
+      if (refreshed.shared) await setMediaShared(refreshed.id, true);
+      setEditing(false);
+      haptics.success();
+    } catch {
+      Alert.alert('Não consegui salvar', 'A lembrança continua intacta. Tente novamente.');
+    } finally {
+      setSavingDetails(false);
+    }
   };
 
   if (item === undefined) {
@@ -110,6 +158,46 @@ export default function MemoriaDetail() {
           )}
 
           <Animated.View entering={enterRise(2)}>
+            {editing ? (
+              <Card style={styles.editorCard}>
+                <Text variant="overline" color="accent">Dar contexto à lembrança</Text>
+                <Text variant="subhead" color="textMuted" style={styles.editorHint}>
+                  Um detalhe pequeno costuma ser o que faz tudo voltar.
+                </Text>
+                <View style={styles.editorFields}>
+                  <TextField
+                    label="O que você quer lembrar"
+                    value={caption}
+                    onChangeText={setCaption}
+                    placeholder="O riso, a conversa, o que ficou…"
+                    multiline
+                  />
+                  <TextField
+                    label="Lugar (opcional)"
+                    value={place}
+                    onChangeText={setPlace}
+                    placeholder="Onde vocês estavam"
+                  />
+                  <DatePickerField label="Quando aconteceu" value={memoryDate} onChange={setMemoryDate} />
+                </View>
+                <View style={styles.editorActions}>
+                  <Button label="Cancelar" variant="ghost" size="sm" onPress={() => setEditing(false)} />
+                  <Button label="Guardar detalhes" icon="check" size="sm" loading={savingDetails} onPress={saveDetails} />
+                </View>
+              </Card>
+            ) : (
+              <Button
+                label="Editar detalhes"
+                icon="edit-3"
+                variant="ghost"
+                size="sm"
+                onPress={openEditor}
+                style={styles.editButton}
+              />
+            )}
+          </Animated.View>
+
+          <Animated.View entering={enterRise(3)}>
             <Card style={styles.sharingCard}>
               <View style={styles.sharingHeader}>
                 <View style={[styles.sharingGlyph, { backgroundColor: theme.colors.accentSoft }]}>
@@ -233,6 +321,11 @@ const styles = StyleSheet.create({
   body: { paddingHorizontal: spacing.lg, paddingTop: spacing.xl },
   metaRow: { flexDirection: 'row', gap: spacing.sm },
   sharingCard: { marginTop: spacing.xxl },
+  editButton: { marginTop: spacing.lg, alignSelf: 'flex-start' },
+  editorCard: { marginTop: spacing.xl },
+  editorHint: { marginTop: spacing.xs },
+  editorFields: { marginTop: spacing.lg, gap: spacing.sm },
+  editorActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.lg },
   sharingHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   sharingGlyph: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   sharingCopy: { flex: 1 },

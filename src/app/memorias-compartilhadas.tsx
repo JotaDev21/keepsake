@@ -23,10 +23,21 @@ export default function MemoriasCompartilhadas() {
   const partnerProfile = useSyncStore((state) => state.partnerProfile);
   const refresh = useSyncStore((state) => state.refreshSharedMedia);
   const [filter, setFilter] = useState<Filter>('todos');
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const refreshNow = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await refresh();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const visible = useMemo(
     () =>
@@ -95,6 +106,8 @@ export default function MemoriasCompartilhadas() {
           numColumns={2}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
+          refreshing={refreshing}
+          onRefresh={() => void refreshNow()}
           columnWrapperStyle={styles.row}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.content}

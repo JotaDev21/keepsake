@@ -8,8 +8,6 @@ import { Storage } from 'expo-sqlite/kv-store';
 export type OutboxKind =
   | 'mood'
   | 'visit'
-  | 'gratitude'
-  | 'reason'
   | 'song'
   | 'water'
   | 'answer'
@@ -30,11 +28,17 @@ export interface OutboxItem {
 }
 
 const KEY = 'sync.outbox';
+let pendingListener: (() => void) | null = null;
 
 function read(): OutboxItem[] {
   try {
     const raw = Storage.getItemSync(KEY);
-    return raw ? (JSON.parse(raw) as OutboxItem[]) : [];
+    const parsed = raw ? (JSON.parse(raw) as OutboxItem[]) : [];
+    // Early builds queued private journal content as an implicit cloud backup.
+    // Never replay those legacy entries without an explicit backup feature.
+    return parsed.filter(
+      (item) => item.kind !== ('gratitude' as string) && item.kind !== ('reason' as string),
+    );
   } catch {
     return [];
   }
@@ -55,6 +59,7 @@ export const outbox = {
 
   add(item: OutboxItem): void {
     write([...read().filter((i) => i.key !== item.key), item]);
+    pendingListener?.();
   },
 
   /**
@@ -68,5 +73,13 @@ export const outbox = {
   /** Drop everything (leaving a couple — queued items no longer apply). */
   clear(): void {
     write([]);
+  },
+
+  /** Let the sync layer retry while the app remains open and the network returns. */
+  onPending(listener: () => void): () => void {
+    pendingListener = listener;
+    return () => {
+      if (pendingListener === listener) pendingListener = null;
+    };
   },
 };

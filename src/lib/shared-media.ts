@@ -1,4 +1,5 @@
 import { File } from 'expo-file-system';
+import { Storage } from 'expo-sqlite/kv-store';
 
 import { extFromUri, mediaUri } from '@/lib/media';
 import { supabase } from '@/lib/supabase';
@@ -31,6 +32,34 @@ interface SharedMediaRow {
 const BUCKET = 'shared-media';
 const MAX_BYTES = 45 * 1024 * 1024;
 const URL_TTL_SECONDS = 7 * 24 * 60 * 60;
+const CACHE_PREFIX = 'sync.sharedMedia.';
+
+function cachedSharedMedia(coupleId: string): SharedMediaItem[] | null {
+  try {
+    const raw = Storage.getItemSync(`${CACHE_PREFIX}${coupleId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as SharedMediaItem[];
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function cacheSharedMedia(coupleId: string, items: SharedMediaItem[]): void {
+  try {
+    Storage.setItemSync(`${CACHE_PREFIX}${coupleId}`, JSON.stringify(items));
+  } catch {
+    // The remote source remains authoritative; this only softens offline opens.
+  }
+}
+
+export function clearSharedMediaCache(coupleId: string): void {
+  try {
+    Storage.removeItemSync(`${CACHE_PREFIX}${coupleId}`);
+  } catch {
+    // Best-effort privacy cleanup on unpair.
+  }
+}
 
 function mimeFor(tipo: MediaType, extension: string): string {
   const ext = extension.toLowerCase();
@@ -147,7 +176,7 @@ export async function listSharedMedia(coupleId: string): Promise<SharedMediaItem
     .select('id,author_id,tipo,storage_path,thumb_path,legenda,data_memoria,local,created_at')
     .eq('couple_id', coupleId)
     .order('created_at', { ascending: false });
-  if (error || !data) return null;
+  if (error || !data) return cachedSharedMedia(coupleId);
 
   const rows = data as SharedMediaRow[];
   const paths = [...new Set(rows.flatMap((row) => [row.storage_path, row.thumb_path]).filter(
@@ -156,13 +185,13 @@ export async function listSharedMedia(coupleId: string): Promise<SharedMediaItem
   const { data: signed, error: signedError } = await supabase.storage
     .from(BUCKET)
     .createSignedUrls(paths, URL_TTL_SECONDS);
-  if (signedError || !signed) return null;
+  if (signedError || !signed) return cachedSharedMedia(coupleId);
   const urls = new Map(
     signed
       .filter((entry) => entry.path && entry.signedUrl)
       .map((entry) => [entry.path as string, entry.signedUrl as string]),
   );
-  return rows.flatMap((row): SharedMediaItem[] => {
+  const items = rows.flatMap((row): SharedMediaItem[] => {
     const fileUrl = urls.get(row.storage_path);
     if (!fileUrl) return [];
     return [{
@@ -177,4 +206,6 @@ export async function listSharedMedia(coupleId: string): Promise<SharedMediaItem
       criadoEm: Date.parse(row.created_at) || Date.now(),
     }];
   });
+  cacheSharedMedia(coupleId, items);
+  return items;
 }

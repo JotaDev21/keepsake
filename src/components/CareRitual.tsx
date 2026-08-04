@@ -1,7 +1,10 @@
+import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { radius, spacing, useTheme, withAlpha } from '@/design';
 import { CARE_OPTIONS, type CareKind } from '@/lib/care';
+import { startOfDay } from '@/lib/mood';
+import { useNow } from '@/lib/useNow';
 import { useCareStore } from '@/stores/useCareStore';
 
 import { Icon } from './Icon';
@@ -19,8 +22,15 @@ export function CareRitual({
   const mine = useCareStore((state) => state.mine);
   const partner = useCareStore((state) => state.partner);
   const sharing = useCareStore((state) => state.sharing);
+  const hydrate = useCareStore((state) => state.hydrate);
   const toggle = useCareStore((state) => state.toggle);
   const setSharing = useCareStore((state) => state.setSharing);
+  const nowMs = useNow();
+  const today = startOfDay(new Date(nowMs));
+
+  useEffect(() => {
+    hydrate();
+  }, [hydrate, today]);
 
   const mineHas = (kind: CareKind) => mine.some((signal) => signal.kind === kind);
   const partnerHas = (kind: CareKind) => partner.some((signal) => signal.kind === kind);

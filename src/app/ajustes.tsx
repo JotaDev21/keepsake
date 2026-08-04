@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import * as ScreenCapture from 'expo-screen-capture';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { BackButton, Card, Chip, Icon, ScreenHeader, Text } from '@/components';
+import { AccentPicker, BackButton, Card, Chip, Icon, ScreenHeader, Text } from '@/components';
 import { waterRepo } from '@/db/repositories';
 import { radius, spacing, useMode, useTheme } from '@/design';
 import { authenticate, canUseBiometrics } from '@/lib/auth';
@@ -30,6 +30,7 @@ export default function Ajustes() {
   const insets = useSafeAreaInsets();
   const { mode, toggleMode } = useMode();
   const person = usePersonStore((s) => s.person);
+  const setPersonAccent = usePersonStore((s) => s.setAccent);
   const partnerJoined = useSyncStore((s) => s.partnerJoined);
   const sharing = useSyncStore((s) => s.sharingPreferences);
   const setSharingPreference = useSyncStore((s) => s.setSharingPreference);
@@ -185,6 +186,17 @@ export default function Ajustes() {
               thumbColor={theme.colors.text}
             />
           </View>
+          {person ? (
+            <View style={[styles.palette, { borderTopColor: theme.colors.border }]}>
+              <Text variant="callout" color="text">Paleta do vínculo</Text>
+              <Text variant="subhead" color="textMuted" style={styles.rowHint}>
+                Dourado, mel, terracota ou folha. O girassol continua natural; a luz ao redor muda.
+              </Text>
+              <View style={styles.palettePicker}>
+                <AccentPicker value={person.accent} onChange={(color) => void setPersonAccent(color)} />
+              </View>
+            </View>
+          ) : null}
         </Card>
 
         <Text variant="overline" color="textMuted" style={styles.sectionLabel}>
@@ -498,4 +510,6 @@ const styles = StyleSheet.create({
   sharingRow: { paddingVertical: spacing.lg },
   connectionHint: { marginTop: spacing.sm },
   disabled: { opacity: 0.5 },
+  palette: { marginTop: spacing.lg, paddingTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth },
+  palettePicker: { marginTop: spacing.md },
 });

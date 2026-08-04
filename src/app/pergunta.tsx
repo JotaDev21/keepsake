@@ -8,6 +8,7 @@ import { BackButton, Button, Card, PetalBurst, ScreenHeader, SunflowerMark, Text
 import { spacing, useTheme } from '@/design';
 import { haptics } from '@/lib/haptics';
 import { startOfDay } from '@/lib/mood';
+import { useNow } from '@/lib/useNow';
 import { useAchievementStore } from '@/stores/useAchievementStore';
 import { usePersonStore } from '@/stores/usePersonStore';
 import { useQuestionStore } from '@/stores/useQuestionStore';
@@ -20,6 +21,8 @@ import { useSyncStore } from '@/stores/useSyncStore';
 export default function PerguntaScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const nowMs = useNow();
+  const dia = startOfDay(new Date(nowMs));
   const person = usePersonStore((s) => s.person);
   const pergunta = useQuestionStore((s) => s.pergunta);
   const minhaResposta = useQuestionStore((s) => s.minhaResposta);
@@ -37,10 +40,12 @@ export default function PerguntaScreen() {
   const nome = person?.nome ?? 'a outra pessoa';
 
   useEffect(() => {
+    celebrated.current = false;
+    setTexto('');
     if (person) load(person.id);
-  }, [person, load]);
+  }, [dia, person, load]);
 
-  const partnerToday = partnerAnswer != null && partnerAnswer.dia === startOfDay() ? partnerAnswer.resposta : null;
+  const partnerToday = partnerAnswer != null && partnerAnswer.dia === dia ? partnerAnswer.resposta : null;
   const revealed = minhaResposta != null && partnerToday != null;
 
   // The reveal is a small ritual — once, when both answers meet.
@@ -49,9 +54,9 @@ export default function PerguntaScreen() {
       celebrated.current = true;
       haptics.success();
       setBurst((b) => b + 1);
-      void claimAchievement('resposta_encontro', { dia: startOfDay() });
+      void claimAchievement('resposta_encontro', { dia });
     }
-  }, [claimAchievement, revealed]);
+  }, [claimAchievement, dia, revealed]);
 
   const onAnswer = async () => {
     if (!person || !texto.trim() || saving) return;
