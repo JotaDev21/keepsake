@@ -1,7 +1,7 @@
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
-import { radius, spacing, useTheme, withAlpha } from '@/design';
+import { radius, spacing, useTheme } from '@/design';
 import { haptics } from '@/lib/haptics';
 import {
   isPulseFresh,
@@ -72,31 +72,18 @@ export function PulseCard({
         {
           backgroundColor: theme.colors.surface,
           borderColor: theme.colors.border,
-          experimental_backgroundImage: `linear-gradient(150deg, ${theme.colors.surfaceElevated} 0%, ${theme.colors.surface} 44%, ${theme.colors.accentSoft} 155%)`,
-          boxShadow: '0 18px 44px rgba(0, 0, 0, 0.28)',
         },
       ]}
     >
       <View style={styles.heading}>
+        <MemberAvatar name={partnerName} uri={partnerAvatarUrl} size={spacing.xxxl} />
         <View style={styles.headingCopy}>
           <Text variant="overline" color="textMuted">
-            Pulso rápido
+            Entre vocês
           </Text>
-          <Text variant="title1" color="text" style={styles.title}>
-            Um sinal entre vocês
+          <Text variant="title2" color="text" style={styles.title}>
+            Um pequeno sinal
           </Text>
-        </View>
-        <View
-          style={[
-            styles.liveDot,
-            {
-              backgroundColor: theme.colors.accentSoft,
-              borderColor: theme.colors.accentEdge,
-              boxShadow: `0 8px 22px ${theme.colors.accentGlow}`,
-            },
-          ]}
-        >
-          <View style={[styles.liveCore, { backgroundColor: theme.colors.accent }]} />
         </View>
       </View>
 
@@ -132,7 +119,7 @@ export function PulseCard({
           {partnerPresenceLabel ? (
             <View style={styles.presence}>
               <View style={[styles.presenceDot, { backgroundColor: theme.colors.accent }]} />
-              <Text variant="caption" color="textFaint">
+              <Text variant="caption" color="textMuted" style={styles.wrappingText}>
                 {partnerPresenceLabel}
               </Text>
             </View>
@@ -166,9 +153,6 @@ export function PulseCard({
                         ? theme.colors.accentSoft
                         : theme.colors.surfaceElevated,
                       borderColor: selected ? theme.colors.accentEdge : theme.colors.border,
-                      experimental_backgroundImage: selected
-                        ? `linear-gradient(145deg, ${theme.colors.accentSoft} 0%, ${theme.colors.surface} 130%)`
-                        : `linear-gradient(145deg, ${theme.colors.surfaceElevated} 0%, ${theme.colors.surface} 100%)`,
                     },
                   ]}
                 >
@@ -177,7 +161,7 @@ export function PulseCard({
                     size={14}
                     color={selected ? 'accent' : 'textMuted'}
                   />
-                  <Text variant="caption" color={selected ? 'accent' : 'textSecondary'}>
+                  <Text variant="caption" color={selected ? 'accent' : 'textSecondary'} style={styles.wrappingText}>
                     {option.label}
                   </Text>
                 </PressableScale>
@@ -188,13 +172,9 @@ export function PulseCard({
       ) : null}
 
       <Text variant="overline" color="textMuted" style={styles.sectionLabel}>
-        Seu sinal
+        O que você quer dizer agora?
       </Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.options}
-      >
+      <View style={styles.options}>
         {pulseOptions.map((option) => {
           const selected = activeMine?.kind === option.key;
           return (
@@ -204,6 +184,7 @@ export function PulseCard({
               haptic={false}
               scaleTo={0.96}
               accessibilityLabel={`Compartilhar: ${option.label}`}
+              accessibilityState={{ selected, disabled }}
               onPress={() => select(option.key)}
               style={[
                 styles.option,
@@ -212,32 +193,26 @@ export function PulseCard({
                     ? theme.colors.accentSoft
                     : theme.colors.surfaceElevated,
                   borderColor: selected ? theme.colors.accentEdge : theme.colors.border,
-                  experimental_backgroundImage: selected
-                    ? `radial-gradient(circle at 20% 12%, ${theme.colors.accentGlow} 0%, ${theme.colors.accentSoft} 34%, ${theme.colors.surface} 120%)`
-                    : `linear-gradient(145deg, ${theme.colors.surfaceElevated} 0%, ${theme.colors.surface} 100%)`,
-                  boxShadow: selected
-                    ? `0 10px 24px ${withAlpha(theme.colors.accentBloom, 0.14)}`
-                    : undefined,
                   opacity: disabled ? 0.55 : 1,
                 },
               ]}
             >
               <Icon
                 name={option.icon}
-                size={18}
+                size={spacing.lg}
                 color={selected ? 'accent' : 'textSecondary'}
               />
               <Text
                 variant="caption"
                 color={selected ? 'accent' : 'textSecondary'}
-                style={styles.optionLabel}
+                style={styles.wrappingText}
               >
                 {option.label}
               </Text>
             </PressableScale>
           );
         })}
-      </ScrollView>
+      </View>
 
       {activeMine ? (
         <Animated.View
@@ -282,32 +257,24 @@ export function PulseCard({
 }
 
 const styles = StyleSheet.create({
+  wrappingText: { flexShrink: 1 },
   flex: { flex: 1 },
   card: {
     gap: spacing.md,
     paddingVertical: spacing.lg,
-    borderRadius: radius.xl,
+    borderRadius: radius.lg,
     borderCurve: 'continuous',
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },
   heading: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: spacing.md,
     paddingHorizontal: spacing.lg,
   },
   headingCopy: { flex: 1 },
   title: { marginTop: spacing.xs },
-  liveDot: {
-    width: 34,
-    height: 34,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  liveCore: { width: spacing.sm, height: spacing.sm, borderRadius: radius.pill },
   partnerSignal: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -322,6 +289,8 @@ const styles = StyleSheet.create({
   presence: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   presenceDot: { width: 5, height: 5, borderRadius: radius.pill },
   options: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
   },
@@ -336,6 +305,8 @@ const styles = StyleSheet.create({
   },
   sectionLabel: { paddingHorizontal: spacing.lg },
   response: {
+    minHeight: spacing.xxxl,
+    maxWidth: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
@@ -346,16 +317,16 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
   },
   option: {
-    width: 112,
-    minHeight: 92,
-    justifyContent: 'space-between',
-    gap: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: spacing.xxxl,
+    maxWidth: '100%',
+    gap: spacing.sm,
     padding: spacing.md,
-    borderRadius: radius.lg,
+    borderRadius: radius.sm,
     borderCurve: 'continuous',
     borderWidth: StyleSheet.hairlineWidth,
   },
-  optionLabel: { lineHeight: 18 },
   sent: {
     flexDirection: 'row',
     alignItems: 'center',
